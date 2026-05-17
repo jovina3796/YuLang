@@ -1,15 +1,17 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { ShieldCheck, Loader2, Check, LayoutDashboard, Plus, Pencil, Trash2 } from 'lucide-react'
+import { ShieldCheck, Loader2, Check, LayoutDashboard, Plus, Pencil, Trash2, Database } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import {
   NAV_HREFS, NAV_LABELS,
   DASHBOARD_SECTIONS, DASHBOARD_SECTION_LABELS,
+  SCOPED_RESOURCES, SCOPED_RESOURCE_LABELS,
   type NavHref, type DashboardSection,
-  type RoleDefaults, type RoleDashboardSections,
+  type RoleDefaults, type RoleDashboardSections, type RoleDataScopes,
+  type ScopedResource, type DataScopeValue, type DataScope,
 } from '@/lib/permissions'
 import {
-  saveRoleDefaults, saveRoleDashboardSections,
+  saveRoleDefaults, saveRoleDashboardSections, saveRoleDataScope,
   createRole, updateRole, deleteRole, countUsersInRole,
 } from '@/app/(dashboard)/users/actions'
 import type { Role } from '@/app/(dashboard)/users/actions'
@@ -19,6 +21,7 @@ interface Props {
   roles:    RoleRow[]
   defaults: RoleDefaults
   sections: RoleDashboardSections
+  scopes:   RoleDataScopes
 }
 
 const BADGE_OPTIONS: { value: string; label: string }[] = [
@@ -29,7 +32,7 @@ const BADGE_OPTIONS: { value: string; label: string }[] = [
   { value: 'badge-purple', label: '紫色' },
 ]
 
-export default function RolePermissionsForm({ roles, defaults, sections }: Props) {
+export default function RolePermissionsForm({ roles, defaults, sections, scopes }: Props) {
   const router = useRouter()
   const [pageState, setPageState] = useState<Record<Role, Set<NavHref>>>(() => {
     const m: Record<string, Set<NavHref>> = {}
@@ -39,6 +42,11 @@ export default function RolePermissionsForm({ roles, defaults, sections }: Props
   const [secState, setSecState] = useState<Record<Role, Set<DashboardSection>>>(() => {
     const m: Record<string, Set<DashboardSection>> = {}
     for (const r of roles) m[r.key] = new Set<DashboardSection>((sections[r.key] ?? []) as readonly DashboardSection[])
+    return m
+  })
+  const [scopeState, setScopeState] = useState<Record<Role, DataScope>>(() => {
+    const m: Record<string, DataScope> = {}
+    for (const r of roles) m[r.key] = { ...(scopes[r.key] ?? {}) }
     return m
   })
   const [savedFlash,  setSavedFlash]  = useState<Role | null>(null)
@@ -61,6 +69,9 @@ export default function RolePermissionsForm({ roles, defaults, sections }: Props
       return { ...prev, [role]: next }
     })
   }
+  function setScope(role: Role, resource: ScopedResource, value: DataScopeValue) {
+    setScopeState(prev => ({ ...prev, [role]: { ...(prev[role] ?? {}), [resource]: value } }))
+  }
   function selectAllPages(role: Role) {
     setPageState(prev => ({ ...prev, [role]: new Set<NavHref>(NAV_HREFS) }))
   }
@@ -79,22 +90,32 @@ export default function RolePermissionsForm({ roles, defaults, sections }: Props
     for (const x of a) if (!b.has(x)) return false
     return true
   }
+  function scopeEq(a: DataScope, b: DataScope): boolean {
+    for (const r of SCOPED_RESOURCES) {
+      const av = a[r] ?? 'all'
+      const bv = b[r] ?? 'all'
+      if (av !== bv) return false
+    }
+    return true
+  }
   function isDirty(role: Role): boolean {
     const origPages = new Set<string>(defaults[role] ?? [])
     const origSec   = new Set<string>(sections[role] ?? [])
     return !setEq(origPages, (pageState[role] ?? new Set()) as ReadonlySet<string>)
         || !setEq(origSec,   (secState[role]  ?? new Set()) as ReadonlySet<string>)
+        || !scopeEq(scopes[role] ?? {}, scopeState[role] ?? {})
   }
 
   function handleSave(role: Role) {
     setSavingRole(role)
     startTransition(async () => {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         saveRoleDefaults(role, Array.from(pageState[role] ?? [])),
         saveRoleDashboardSections(role, Array.from(secState[role] ?? [])),
+        saveRoleDataScope(role, scopeState[role] ?? {}),
       ])
       setSavingRole(null)
-      const err = r1.error ?? r2.error
+      const err = r1.error ?? r2.error ?? r3.error
       if (err) { alert(`儲存失敗：${err}`); return }
       setSavedFlash(role)
       setTimeout(() => setSavedFlash(null), 1800)
@@ -230,7 +251,7 @@ export default function RolePermissionsForm({ roles, defaults, sections }: Props
             </div>
 
             {/* 儀表板區塊 */}
-            <div style={{ padding: 14 }}>
+            <div style={{ padding: 14, borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
                   <LayoutDashboard size={14} style={{ color: 'var(--blue)' }} /> 儀表板可見區塊
@@ -262,6 +283,53 @@ export default function RolePermissionsForm({ roles, defaults, sections }: Props
                       />
                       <span style={{ fontSize: 13 }}>{DASHBOARD_SECTION_LABELS[s]}</span>
                     </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 資料範圍 */}
+            <div style={{ padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
+                  <Database size={14} style={{ color: 'var(--purple)' }} /> 資料範圍
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  「僅本人」需該角色帳號連結對應司機才會看到資料
+                </div>
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 8,
+              }}>
+                {SCOPED_RESOURCES.map(res => {
+                  const current: DataScopeValue = scopeState[meta.key]?.[res] ?? 'all'
+                  return (
+                    <div key={res} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 10, padding: '8px 12px', borderRadius: 8,
+                      background: 'var(--bg)', border: '1px solid var(--border)',
+                    }}>
+                      <span style={{ fontSize: 13 }}>{SCOPED_RESOURCE_LABELS[res]}</span>
+                      <div style={{ display: 'inline-flex', border: '1px solid var(--border2)', borderRadius: 6, overflow: 'hidden' }}>
+                        {(['all', 'self'] as const).map(v => (
+                          <button
+                            key={v}
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setScope(meta.key, res, v)}
+                            style={{
+                              padding: '4px 12px', fontSize: 12, border: 'none', cursor: busy ? 'not-allowed' : 'pointer',
+                              background: current === v ? 'var(--accent2)' : 'transparent',
+                              color:      current === v ? '#fff' : 'var(--text2)',
+                            }}
+                          >
+                            {v === 'all' ? '全部' : '僅本人'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )
                 })}
               </div>

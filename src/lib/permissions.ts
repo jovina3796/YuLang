@@ -2,11 +2,15 @@ import type { Role } from '@/lib/auth'
 
 // Every nav route the app exposes. Order matches Sidebar groups so admin
 // checkbox UI reads top-to-bottom in the same order as the sidebar.
+// /people is split into 3 sub-routes so admin can grant per-tab access
+// (e.g. accountant sees /people/drivers but not /people/users).
 export const NAV_HREFS = [
   '/dashboard',
   '/trips',
   '/vehicles',
-  '/people',
+  '/people/drivers',
+  '/people/users',
+  '/people/permissions',
   '/schedule',
   '/fuel',
   '/maintenance',
@@ -23,22 +27,34 @@ export const NAV_HREFS = [
 export type NavHref = (typeof NAV_HREFS)[number]
 
 export const NAV_LABELS: Record<NavHref, string> = {
-  '/dashboard':    '儀表板',
-  '/trips':        '車趟紀錄',
-  '/vehicles':     '車輛列表',
-  '/people':       '人員管理',
-  '/schedule':     '排班設定',
-  '/fuel':         '加油紀錄',
-  '/maintenance':  '保養維修',
-  '/inspection':   '驗車紀錄',
-  '/reports':      '統計報表',
-  '/finance':      '收支報表',
-  '/payroll':      '薪資單據',
-  '/vendor-info':  '廠商資訊',
-  '/claims':       '請款簽核',
-  '/leaves':       '請假簽核',
-  '/overtimes':    '加班簽核',
-  '/settings':     '系統設定',
+  '/dashboard':           '儀表板',
+  '/trips':               '車趟紀錄',
+  '/vehicles':            '車輛列表',
+  '/people/drivers':      '人員管理 — 司機資料',
+  '/people/users':        '人員管理 — 登入帳號',
+  '/people/permissions':  '人員管理 — 權限設定',
+  '/schedule':            '排班設定',
+  '/fuel':                '加油紀錄',
+  '/maintenance':         '保養維修',
+  '/inspection':          '驗車紀錄',
+  '/reports':             '統計報表',
+  '/finance':             '收支報表',
+  '/payroll':             '薪資單據',
+  '/vendor-info':         '廠商資訊',
+  '/claims':              '請款簽核',
+  '/leaves':              '請假簽核',
+  '/overtimes':           '加班簽核',
+  '/settings':            '系統設定',
+}
+
+// Sidebar groups multiple sub-routes under a single parent label. Each entry
+// here drives one Sidebar link: visible iff any sub is allowed; navigates to
+// the first allowed sub.
+export const NAV_PARENTS: Record<string, { label: string; subs: NavHref[] }> = {
+  '/people': {
+    label: '人員管理',
+    subs:  ['/people/drivers', '/people/users', '/people/permissions'],
+  },
 }
 
 export type RoleDefaults = Record<string, readonly string[]>
@@ -57,7 +73,7 @@ function defaultsFor(role: Role, defaults: RoleDefaults): readonly string[] {
 
 // === Dashboard sections (Q2) ===
 // Each represents one card on /dashboard. Admin can hide individual cards
-// per role via /people?tab=permissions. Stored in role_permissions.allowed_dashboard_sections.
+// per role via /people/permissions. Stored in role_permissions.allowed_dashboard_sections.
 export const DASHBOARD_SECTIONS = [
   'kpi',
   'recent_trips',
@@ -99,6 +115,41 @@ export function sanitizeDashboardSections(raw: string[] | null | undefined): str
   return Array.from(new Set(raw.filter(s => valid.has(s))))
 }
 
+// === Per-resource data scope (Q3) ===
+// Lets admin restrict roles to "own data only" for resources where ownership
+// is a meaningful concept. Stored in role_permissions.data_scope (jsonb).
+// Resources not in the map default to 'all'.
+export const SCOPED_RESOURCES = ['trips'] as const
+export type ScopedResource = (typeof SCOPED_RESOURCES)[number]
+export type DataScopeValue = 'all' | 'self'
+export type DataScope = Partial<Record<ScopedResource, DataScopeValue>>
+export type RoleDataScopes = Record<string, DataScope>
+
+export const SCOPED_RESOURCE_LABELS: Record<ScopedResource, string> = {
+  trips: '車趟紀錄',
+}
+
+export const DATA_SCOPE_FALLBACK: RoleDataScopes = {
+  admin:  { trips: 'all' },
+  driver: { trips: 'self' },
+}
+
+/** Resolve a single resource's effective scope for a role, defaulting to 'all'. */
+export function scopeFor(scopes: RoleDataScopes, role: Role, resource: ScopedResource): DataScopeValue {
+  return scopes[role]?.[resource] ?? 'all'
+}
+
+/** Validate scope payload against canonical resources/values. */
+export function sanitizeDataScope(raw: unknown): DataScope {
+  const out: DataScope = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const r of SCOPED_RESOURCES) {
+    const v = (raw as Record<string, unknown>)[r]
+    if (v === 'all' || v === 'self') out[r] = v
+  }
+  return out
+}
+
 /**
  * Resolve the effective allow-set for a profile.
  * - allowed_pages null → role default
@@ -119,7 +170,14 @@ export function resolveAllowedPages(
   return out
 }
 
-/** Pathname permission check: a request to /foo/bar is allowed iff /foo is in the allow-set. */
+/**
+ * Pathname permission check.
+ * Allowed iff:
+ *   - the path matches an allow entry exactly, or
+ *   - the path is under an allow entry (e.g. /trips/123 with /trips), or
+ *   - the path is a parent of an allow entry (e.g. /people landing page when
+ *     /people/drivers is allowed — needed so the redirect entry can run).
+ */
 export function canAccess(
   p: { role: Role; allowed_pages: string[] | null },
   pathname: string,
@@ -128,7 +186,9 @@ export function canAccess(
   if (!pathname || pathname === '/') return true
   const allowed = resolveAllowedPages(p, defaults)
   for (const h of allowed) {
-    if (pathname === h || pathname.startsWith(h + '/')) return true
+    if (pathname === h) return true
+    if (pathname.startsWith(h + '/')) return true
+    if (h.startsWith(pathname + '/')) return true
   }
   return false
 }

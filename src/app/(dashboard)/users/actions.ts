@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getCurrentProfile } from '@/lib/auth'
-import { NAV_HREFS, sanitizeAllowedPages, sanitizeDashboardSections } from '@/lib/permissions'
+import { NAV_HREFS, sanitizeAllowedPages, sanitizeDashboardSections, sanitizeDataScope } from '@/lib/permissions'
 import { loadRoleDefaults } from '@/lib/rolePermissions.server'
 import { deriveDriverCredentials } from '@/lib/driverCredentials'
 
@@ -104,7 +104,7 @@ export async function createUser(input: UserInput) {
     return { error: e2.message }
   }
 
-  revalidatePath('/people')
+  revalidatePath('/people/users')
   return { error: null }
 }
 
@@ -150,7 +150,7 @@ export async function updateUser(id: string, input: Omit<UserInput, 'password'>)
   }).eq('id', id)
   if (e2) return { error: e2.message }
 
-  revalidatePath('/people')
+  revalidatePath('/people/users')
   return { error: null }
 }
 
@@ -241,7 +241,7 @@ export async function createUserForDriver(
     return { error: e2.message, skipped: false }
   }
 
-  revalidatePath('/people')
+  revalidatePath('/people/users')
   return { error: null, skipped: false, credentials: cred }
 }
 
@@ -257,7 +257,7 @@ export async function unbindLine(driverId: string) {
   ])
   if (e1 || e2) return { error: (e1 ?? e2)!.message }
 
-  revalidatePath('/people')
+  revalidatePath('/people/users')
   return { error: null }
 }
 
@@ -310,6 +310,28 @@ export async function saveRoleDashboardSections(role: Role, sections: string[]) 
   if (upErr) return { error: upErr.message }
 
   revalidatePath('/dashboard')
+  return { error: null }
+}
+
+/** Save per-resource data scope ('all' | 'self') for a role. */
+export async function saveRoleDataScope(role: Role, raw: unknown) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error }
+
+  const supabase = createServiceClient()
+  const { data: roleRow } = await supabase
+    .from('roles').select('key').eq('key', role).maybeSingle()
+  if (!roleRow) return { error: '無效的角色' }
+
+  const cleaned = sanitizeDataScope(raw)
+
+  const { error: upErr } = await supabase
+    .from('role_permissions')
+    .update({ data_scope: cleaned, updated_at: new Date().toISOString() })
+    .eq('role', role)
+  if (upErr) return { error: upErr.message }
+
+  revalidatePath('/', 'layout')
   return { error: null }
 }
 

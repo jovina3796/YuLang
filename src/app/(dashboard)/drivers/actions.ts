@@ -41,10 +41,10 @@ export async function createDriver(input: DriverInput) {
   // when phone is missing or email already exists; never blocks driver creation.
   if (data?.id) {
     const r = await createUserForDriver(data.id, { adminGuard: false })
-    revalidatePath('/people')
+    revalidatePath('/people/drivers')
     return { error: null, accountResult: r }
   }
-  revalidatePath('/people')
+  revalidatePath('/people/drivers')
   return { error: null }
 }
 

@@ -15,7 +15,10 @@ import ThemeToggle from './ThemeToggle'
 import ProfileModal from './ProfileModal'
 import { signOut } from '@/app/login/actions'
 
-type NavItem  = { href: string; Icon: LucideIcon; label: string }
+// One sidebar entry. Some routes (e.g. /people) are split into per-tab sub-routes
+// for permission granularity; for those we list every sub in `subs`. The link's
+// visibility is OR over `subs`, and its href points at the first allowed sub.
+type NavItem  = { Icon: LucideIcon; label: string; href?: string; subs?: string[] }
 type NavGroup = { section: string | null; items: NavItem[] }
 
 const nav: NavGroup[] = [
@@ -25,7 +28,10 @@ const nav: NavGroup[] = [
   { section: '車隊管理', items: [
     { href: '/trips',        Icon: ScrollText,      label: '車趟紀錄' },
     { href: '/vehicles',     Icon: Truck,           label: '車輛列表' },
-    { href: '/people',       Icon: Users,           label: '人員管理' },
+    {
+      Icon: Users, label: '人員管理',
+      subs: ['/people/drivers', '/people/users', '/people/permissions'],
+    },
     { href: '/schedule',     Icon: CalendarRange,   label: '排班設定' },
   ]},
   { section: '車輛管理', items: [
@@ -61,10 +67,25 @@ export default function Sidebar({ role, roleLabel, email, displayName, avatarUrl
   const [profileOpen, setProfileOpen] = useState(false)
 
   const allowed = new Set(allowedPages)
+
+  // Resolve each nav item to a concrete href (or null when no sub is allowed).
+  type Resolved = { href: string; Icon: LucideIcon; label: string; matchPrefixes: string[] }
+  const resolveItem = (i: NavItem): Resolved | null => {
+    if (i.subs && i.subs.length) {
+      const firstAllowed = i.subs.find(s => allowed.has(s))
+      if (!firstAllowed) return null
+      // Highlight the parent link for any sub-route under any sibling sub.
+      const parent = firstAllowed.replace(/\/[^/]+$/, '')
+      return { href: firstAllowed, Icon: i.Icon, label: i.label, matchPrefixes: [parent] }
+    }
+    if (!i.href || !allowed.has(i.href)) return null
+    return { href: i.href, Icon: i.Icon, label: i.label, matchPrefixes: [i.href] }
+  }
+
   const visibleGroups = nav
     .map(g => ({
-      ...g,
-      items: g.items.filter(i => allowed.has(i.href)),
+      section: g.section,
+      items:   g.items.map(resolveItem).filter((x): x is Resolved => !!x),
     }))
     .filter(g => g.items.length > 0)
 
@@ -80,7 +101,7 @@ export default function Sidebar({ role, roleLabel, email, displayName, avatarUrl
     }}>
       {/* Brand */}
       <div style={{padding: '5px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-end', gap: '10px'}}>
-        <Image src="/yl.png" alt="馭浪物流 Yulang Logistics Ltd." width={168} height={80} 
+        <Image src="/yl.png" alt="馭浪物流 Yulang Logistics Ltd." width={168} height={80}
                style={{ width: '150px', height: 'auto' }}
         />
         <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)'}}>
@@ -100,7 +121,7 @@ export default function Sidebar({ role, roleLabel, email, displayName, avatarUrl
               }}>{group.section}</div>
             )}
             {group.items.map(item => {
-              const active = pathname === item.href || pathname.startsWith(item.href + '/')
+              const active = item.matchPrefixes.some(p => pathname === p || pathname.startsWith(p + '/'))
               const Icon = item.Icon
               return (
                 <Link key={item.href} href={item.href} style={{

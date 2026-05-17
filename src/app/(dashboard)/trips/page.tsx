@@ -5,6 +5,8 @@ import TripDateFilter from '@/components/TripDateFilter'
 import TripImportExport from '@/components/TripImportExport'
 import SortableTh from '@/components/SortableTh'
 import { Check } from 'lucide-react'
+import { getCurrentProfile } from '@/lib/auth'
+import { loadScopeFor } from '@/lib/rolePermissions.server'
 
 type SortField =
   | 'departed_at' | 'vendor' | 'area' | 'service' | 'driver' | 'vehicle'
@@ -24,6 +26,14 @@ export default async function TripsPage({
   const fromIso = from ? new Date(`${from}T00:00:00`).toISOString() : null
   const toIso   = to   ? new Date(`${to}T23:59:59.999`).toISOString() : null
 
+  // Resource scope: 'self' restricts the query (and mutations) to the
+  // current user's linked driver_id. If scoped but no driver_id is linked,
+  // the query is forced empty so partial leaks are impossible.
+  const profile = await getCurrentProfile()
+  const scope = profile ? await loadScopeFor(profile.role, 'trips') : 'all'
+  const scopedToSelf = scope === 'self'
+  const ownDriverId = profile?.driver_id ?? null
+
   let tripsQuery = supabase
     .from('trips')
     .select(`
@@ -41,6 +51,10 @@ export default async function TripsPage({
   if (fromIso) tripsQuery = tripsQuery.gte('departed_at', fromIso)
   if (toIso)   tripsQuery = tripsQuery.lte('departed_at', toIso)
   if (vendor)  tripsQuery = tripsQuery.eq('vendor_id', vendor)
+  if (scopedToSelf) {
+    if (!ownDriverId) tripsQuery = tripsQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+    else              tripsQuery = tripsQuery.eq('driver_id', ownDriverId)
+  }
 
   const [
     { data: trips },
@@ -93,14 +107,18 @@ export default async function TripsPage({
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, alignItems: 'center', flexWrap: 'wrap' }}>
         <TripDateFilter vendors={vendors ?? []} />
         <div style={{ flex: 1 }} />
-        <TripImportExport />
-        <TripFormModal
-          vendors={vendors ?? []}
-          rateRules={rateRules ?? []}
-          drivers={drivers ?? []}
-          vehicles={vehicles ?? []}
-          mode="create"
-        />
+        {!scopedToSelf && (
+          <>
+            <TripImportExport />
+            <TripFormModal
+              vendors={vendors ?? []}
+              rateRules={rateRules ?? []}
+              drivers={drivers ?? []}
+              vehicles={vehicles ?? []}
+              mode="create"
+            />
+          </>
+        )}
       </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
@@ -181,26 +199,28 @@ export default async function TripsPage({
                   </td>
                   <td style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>{t.notes ?? ''}</td>
                   <td style={{ textAlign: 'right', padding: '11px 8px' }}>
-                    <TripRowActions
-                      trip={{
-                        id: t.id,
-                        vendor_id: t.vendor_id,
-                        rate_rule_id: t.rate_rule_id,
-                        driver_id: t.driver_id ?? null,
-                        vehicle_id: t.vehicle_id ?? null,
-                        destination_area: t.destination_area ?? null,
-                        departed_at: t.departed_at ?? null,
-                        actual_stops: t.actual_stops ?? null,
-                        is_kpi_achieved: t.is_kpi_achieved ?? null,
-                        is_special: t.is_special ?? null,
-                        trip_count: t.trip_count ?? 1,
-                        notes: t.notes ?? null,
-                      }}
-                      vendors={vendors ?? []}
-                      rateRules={rateRules ?? []}
-                      drivers={drivers ?? []}
-                      vehicles={vehicles ?? []}
-                    />
+                    {!scopedToSelf && (
+                      <TripRowActions
+                        trip={{
+                          id: t.id,
+                          vendor_id: t.vendor_id,
+                          rate_rule_id: t.rate_rule_id,
+                          driver_id: t.driver_id ?? null,
+                          vehicle_id: t.vehicle_id ?? null,
+                          destination_area: t.destination_area ?? null,
+                          departed_at: t.departed_at ?? null,
+                          actual_stops: t.actual_stops ?? null,
+                          is_kpi_achieved: t.is_kpi_achieved ?? null,
+                          is_special: t.is_special ?? null,
+                          trip_count: t.trip_count ?? 1,
+                          notes: t.notes ?? null,
+                        }}
+                        vendors={vendors ?? []}
+                        rateRules={rateRules ?? []}
+                        drivers={drivers ?? []}
+                        vehicles={vehicles ?? []}
+                      />
+                    )}
                   </td>
                 </tr>
               )
