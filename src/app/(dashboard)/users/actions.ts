@@ -337,7 +337,7 @@ export async function createRole(input: { key: string; label: string; badge_clas
 
   const { error: e2 } = await supabase
     .from('role_permissions')
-    .insert({ role: key, allowed_pages: ['/dashboard'], allowed_dashboard_sections: [] })
+    .insert({ role: key, allowed_pages: ['/dashboard'] })
   if (e2) {
     await supabase.from('roles').delete().eq('key', key)
     return { error: e2.message }

@@ -1,7 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/service'
 import Link from 'next/link'
 import { ArrowBigRightDash } from 'lucide-react'
-import NotesPanel from '@/components/NotesPanel'
 
 type Vendor = { id: string; name: string; warehouse: string | null; billing_cycle_start_day: number; payment_delay_months: number }
 type Trip   = { final_fare: number | null; vendor_id: string; rate_rule_id: string | null; departed_at: string | null; trip_count: number | null }
@@ -71,14 +70,14 @@ export default async function ReportsPage({
     { data: vendors },
     { data: rateRules },
     { data: fixedExp },
-    { data: notes },
   ] = await Promise.all([
     supabase.from('trips')
       .select('final_fare, vendor_id, rate_rule_id, departed_at, trip_count')
       .gte('departed_at', windowStart)
       .eq('status', 'completed'),
-    supabase.from('fuel_logs').select('total_cost')
-      .gte('logged_at', monthStart).lt('logged_at', monthEnd),
+    supabase.from('fuel_logs').select('total_cost, liters, logged_at')
+      .gte('logged_at', new Date(year, month - 5, 1).toISOString())
+      .lt('logged_at', new Date(year, month + 1, 1).toISOString()),
     supabase.from('maintenance_logs').select('cost, serviced_at, deduct_month')
       .gte('serviced_at', new Date(year, month - 6, 1).toISOString().split('T')[0])
       .lt('serviced_at', new Date(year, month + 3, 1).toISOString().split('T')[0]),
@@ -94,7 +93,6 @@ export default async function ReportsPage({
     supabase.from('fixed_expenses')
       .select('name, category, amount, active, start_month, end_month')
       .eq('active', true),
-    supabase.from('notes').select('id, content').order('display_order').order('created_at'),
   ])
 
   const trips: Trip[] = (allTrips ?? []) as Trip[]
@@ -107,7 +105,10 @@ export default async function ReportsPage({
     }
   })
 
-  const fuelCost    = fuelLogs?.reduce((s, f) => s + (f.total_cost ?? 0), 0) ?? 0
+  const fuelCost = (fuelLogs ?? []).filter((f: any) => {
+    const at = new Date(f.logged_at)
+    return at >= new Date(year, month, 1) && at < new Date(year, month + 1, 1)
+  }).reduce((s: number, f: any) => s + Number(f.total_cost ?? 0), 0)
 
   // KPI 維修保養：依施作月份 (serviced_at) 加總當月金額
   const maintCostByService = (maintLogs ?? []).filter((m: any) =>
@@ -314,6 +315,22 @@ export default async function ReportsPage({
   })
   const maxRev = Math.max(...trendData.map(d => d.rev), 1)
 
+  // 6-month fuel trend (liters + cost) — uses natural calendar months
+  const fuelTrendData = Array.from({ length: 6 }, (_, i) => {
+    const ref = shiftMonth(year, month, -(5 - i))
+    const start = new Date(ref.y, ref.m, 1)
+    const end   = new Date(ref.y, ref.m + 1, 1)
+    const inMonth = (fuelLogs ?? []).filter((f: any) => {
+      const at = new Date(f.logged_at)
+      return at >= start && at < end
+    })
+    const liters = inMonth.reduce((s: number, f: any) => s + Number(f.liters ?? 0), 0)
+    const cost   = inMonth.reduce((s: number, f: any) => s + Number(f.total_cost ?? 0), 0)
+    return { label: `${ref.y}/${String(ref.m + 1).padStart(2, '0')}`, liters, cost }
+  })
+  const maxFuelLiters = Math.max(...fuelTrendData.map(d => d.liters), 1)
+  const maxFuelCost   = Math.max(...fuelTrendData.map(d => d.cost), 1)
+
   // 上游支付日期 — 本月實際入帳的車趟（incoming）會在 viewing-month 的 6 號入帳
   const delayCounts = new Map<number, number>()
   ;(vendors ?? []).forEach(v => delayCounts.set(v.payment_delay_months ?? 2, (delayCounts.get(v.payment_delay_months ?? 2) ?? 0) + 1))
@@ -394,7 +411,7 @@ export default async function ReportsPage({
         ))}
       </div>
 
-      {/* Middle row: trend / vendor share / notes */}
+      {/* Middle row: revenue trend / fuel trend / vendor share */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
         <div className="card">
           <div className="card-head"><div className="card-title">近 6 個月營收</div></div>
@@ -407,6 +424,41 @@ export default async function ReportsPage({
                 </div>
                 <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--accent2)', width: 64, textAlign: 'right', flexShrink: 0 }}>
                   {d.rev > 0 ? d.rev.toLocaleString() : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <div className="card-title">近 6 個月油耗 / 費用</div>
+            <div style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--text3)' }}>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--purple)', borderRadius: 2, marginRight: 4 }} />油耗(L)</span>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--amber2)', borderRadius: 2, marginRight: 4 }} />費用($)</span>
+            </div>
+          </div>
+          <div style={{ padding: '8px 0 4px' }}>
+            {fuelTrendData.map(d => (
+              <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '0 12px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', width: 56, flexShrink: 0 }}>{d.label}</div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div className="prog-wrap" style={{ flex: 1, height: 6 }}>
+                      <div style={{ height: '100%', width: `${(d.liters / maxFuelLiters) * 100}%`, background: 'var(--purple)', borderRadius: 2 }} />
+                    </div>
+                    <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--purple)', width: 60, textAlign: 'right', flexShrink: 0 }}>
+                      {d.liters > 0 ? `${d.liters.toLocaleString(undefined, { maximumFractionDigits: 0 })} L` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div className="prog-wrap" style={{ flex: 1, height: 6 }}>
+                      <div style={{ height: '100%', width: `${(d.cost / maxFuelCost) * 100}%`, background: 'var(--amber2)', borderRadius: 2 }} />
+                    </div>
+                    <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--amber2)', width: 60, textAlign: 'right', flexShrink: 0 }}>
+                      {d.cost > 0 ? d.cost.toLocaleString() : ''}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -434,8 +486,6 @@ export default async function ReportsPage({
             </div>
           )}
         </div>
-
-        <NotesPanel notes={notes ?? []} />
       </div>
 
       {/* Bottom row: commission breakdown + deductions */}

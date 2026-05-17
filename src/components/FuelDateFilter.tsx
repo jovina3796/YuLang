@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 
 type Vehicle = { id: string; plate_number: string }
 
-export default function FuelDateFilter({ vehicles }: { vehicles: Vehicle[] }) {
+export default function FuelDateFilter({ vehicles, paymentMethods = [] }: { vehicles: Vehicle[]; paymentMethods?: string[] }) {
   const router       = useRouter()
   const pathname     = usePathname()
   const searchParams = useSearchParams()
@@ -12,14 +12,16 @@ export default function FuelDateFilter({ vehicles }: { vehicles: Vehicle[] }) {
   const [from,      setFrom]      = useState(searchParams.get('from')    ?? '')
   const [to,        setTo]        = useState(searchParams.get('to')      ?? '')
   const [vehicleId, setVehicleId] = useState(searchParams.get('vehicle') ?? '')
+  const [payment,   setPayment]   = useState(searchParams.get('payment') ?? '')
 
   useEffect(() => {
     setFrom(searchParams.get('from') ?? '')
     setTo(searchParams.get('to') ?? '')
     setVehicleId(searchParams.get('vehicle') ?? '')
+    setPayment(searchParams.get('payment') ?? '')
   }, [searchParams])
 
-  function apply(next: { from?: string; to?: string; vehicle?: string }) {
+  function apply(next: { from?: string; to?: string; vehicle?: string; payment?: string }) {
     const params = new URLSearchParams(searchParams.toString())
     const set = (k: string, v: string | undefined) => {
       if (v && v.length) params.set(k, v); else params.delete(k)
@@ -27,6 +29,7 @@ export default function FuelDateFilter({ vehicles }: { vehicles: Vehicle[] }) {
     set('from',    next.from    ?? from)
     set('to',      next.to      ?? to)
     set('vehicle', next.vehicle ?? vehicleId)
+    set('payment', next.payment ?? payment)
     const qs = params.toString()
     router.push(qs ? `${pathname}?${qs}` : pathname)
   }
@@ -52,8 +55,8 @@ export default function FuelDateFilter({ vehicles }: { vehicles: Vehicle[] }) {
   }
 
   function clear() {
-    setFrom(''); setTo(''); setVehicleId('')
-    apply({ from: '', to: '', vehicle: '' })
+    setFrom(''); setTo(''); setVehicleId(''); setPayment('')
+    apply({ from: '', to: '', vehicle: '', payment: '' })
   }
 
   return (
@@ -84,7 +87,17 @@ export default function FuelDateFilter({ vehicles }: { vehicles: Vehicle[] }) {
           <option key={v.id} value={v.id}>{v.plate_number}</option>
         ))}
       </select>
-      {(from || to || vehicleId) && (
+      <select
+        className="input" style={{ width: 160 }}
+        value={payment}
+        onChange={e => { setPayment(e.target.value); apply({ payment: e.target.value }) }}
+      >
+        <option value="">全部付款方式</option>
+        {paymentMethods.map(p => (
+          <option key={p} value={p}>{p}</option>
+        ))}
+      </select>
+      {(from || to || vehicleId || payment) && (
         <button className="btn btn-sm" onClick={clear} style={{ color: 'var(--text3)' }}>清除</button>
       )}
     </div>
