@@ -112,56 +112,62 @@ export default function FuelLiffPage() {
   if (!config) return null
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: 16, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>加油回報</div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>司機：{config.driver.name}</div>
+    <div style={{ minHeight: '100vh', background: '#bac6d4', color: '#000', padding: '16px 0' }}>
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: 16, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4, color: '#000' }}>加油回報</div>
+        <div style={{ fontSize: 12, color: '#2d3a52', marginBottom: 16 }}>司機：{config.driver.name}</div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Field label="日期">
-          <input type="date" required value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
-        </Field>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Field label="日期">
+            <input type="date" required value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
+          </Field>
 
-        <Field label="車輛 *">
-          <select required value={vehicleId} onChange={e => setVehicleId(e.target.value)} style={inputStyle}>
-            <option value="">— 選擇車輛 —</option>
-            {config.vehicles.map(v => (
-              <option key={v.id} value={v.id}>{v.plate_number}</option>
-            ))}
-          </select>
-        </Field>
+          <Field label="車輛 *">
+            <select required value={vehicleId} onChange={e => setVehicleId(e.target.value)} style={inputStyle}>
+              <option value="">— 選擇車輛 —</option>
+              {config.vehicles.map(v => (
+                <option key={v.id} value={v.id}>{v.plate_number}</option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="目前里程 (km)">
-          <input type="number" min={0} inputMode="numeric" value={mileage}
-                 onChange={e => setMileage(e.target.value)} style={inputStyle} placeholder="會同步至車輛里程" />
-        </Field>
+          <Field label="目前里程 (km)">
+            <input type="number" min={0} inputMode="numeric" value={mileage}
+                   onChange={e => setMileage(e.target.value)} style={inputStyle} placeholder="會同步至車輛里程" />
+          </Field>
 
-        <Field label="金額 (NT$) *">
-          <input type="number" min={1} required inputMode="numeric" value={total}
-                 onChange={e => setTotal(e.target.value)} style={inputStyle} />
-        </Field>
+          <Field label="金額 (NT$) *">
+            <input type="number" min={1} required inputMode="numeric" value={total}
+                   onChange={e => setTotal(e.target.value)} style={inputStyle} />
+          </Field>
 
-        <Field label="付款方式">
-          <input type="text" value={payment} onChange={e => setPayment(e.target.value)}
-                 list="payment-options" style={inputStyle} placeholder="可輸入別名，例：阿哲卡" />
-          <datalist id="payment-options">
-            {config.paymentSuggestions.map(p => <option key={p} value={p} />)}
-          </datalist>
-        </Field>
+          <Field label="付款方式">
+            <input type="text" value={payment} onChange={e => setPayment(e.target.value)}
+                   list="payment-options" style={inputStyle} placeholder="可輸入別名，例：阿哲卡" />
+            <datalist id="payment-options">
+              {config.paymentSuggestions.map(p => <option key={p} value={p} />)}
+            </datalist>
+          </Field>
 
-        <Field label="備註">
-          <input type="text" value={notes} onChange={e => setNotes(e.target.value)} style={inputStyle} />
-        </Field>
+          <Field label="備註">
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} style={inputStyle} />
+          </Field>
 
-        <Field label="收據（選填）">
-          <input type="file" accept="image/*,application/pdf"
-                 onChange={e => setReceipt(e.target.files?.[0] ?? null)} />
-          {receipt && <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>已選：{receipt.name}</div>}
-        </Field>
+          <Field label="收據（選填）">
+            <label style={fileBtnStyle}>
+              {receipt ? '更換檔案' : '選擇檔案'}
+              <input type="file" accept="image/*,application/pdf"
+                     onChange={e => setReceipt(e.target.files?.[0] ?? null)}
+                     style={{ display: 'none' }} />
+            </label>
+            {receipt && <div style={{ fontSize: 11, color: '#2d3a52', marginTop: 6 }}>已選：{receipt.name}</div>}
+          </Field>
 
-        <button type="submit" disabled={stage === 'submitting' || !vehicleId || !total} style={submitStyle}>
-          {stage === 'submitting' ? '送出中…' : '送出'}
-        </button>
-      </form>
+          <button type="submit" disabled={stage === 'submitting' || !vehicleId || !total} style={submitStyle}>
+            {stage === 'submitting' ? '送出中…' : '送出'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
@@ -169,7 +175,7 @@ export default function FuelLiffPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ fontSize: 12, color: '#555' }}>{label}</span>
+      <span style={{ fontSize: 12, color: '#000', fontWeight: 600 }}>{label}</span>
       {children}
     </label>
   )
@@ -177,15 +183,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#bac6d4', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       {children}
     </div>
   )
 }
 
 const inputStyle: React.CSSProperties = {
-  border: '1px solid #ddd', borderRadius: 8, padding: '10px 12px',
+  border: '1px solid #9aa6b8', borderRadius: 8, padding: '10px 12px',
   fontSize: 16, width: '100%', boxSizing: 'border-box',
+  background: '#ffffff', color: '#000',
+}
+
+const fileBtnStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  background: '#2d3a52', color: '#ffffff', border: 'none', borderRadius: 8,
+  padding: '10px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+  alignSelf: 'flex-start',
 }
 
 const submitStyle: React.CSSProperties = {

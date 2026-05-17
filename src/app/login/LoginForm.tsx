@@ -2,12 +2,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { CircleArrowRight } from 'lucide-react'
+import { CircleArrowRight, KeyRound } from 'lucide-react'
 import { signIn } from './actions'
 
-const BG = '#5a6274'
-const FIELD_BG = '#c8ced8'
-const TEXT = '#ffffff'
+const BG = '#bac6d4'
+const FIELD_BG = '#ffffff'
+const TEXT = '#2d3a52'
 
 export default function LoginForm() {
   const router = useRouter()
@@ -46,13 +46,14 @@ export default function LoginForm() {
         .login-form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 360px; }
         .login-label { display: flex; flex-direction: column; gap: 6px; }
         .login-label > span { font-size: 13px; color: ${TEXT}; letter-spacing: 1px; }
-        .login-input { background: ${FIELD_BG}; border: none; border-radius: 4px; padding: 8px 12px; font-size: 14px; color: #1f2630; outline: none; height: 32px; }
-        .login-error { font-size: 12px; color: #fff; background: rgba(220,80,80,.25); border: 1px solid rgba(255,180,180,.35); border-radius: 6px; padding: 8px 12px; }
+        .login-input { background: ${FIELD_BG}; border: 1px solid #9aa6b8; border-radius: 4px; padding: 8px 12px; font-size: 14px; color: #1f2630; outline: none; height: 32px; }
+        .login-error { font-size: 12px; color: #b00020; background: rgba(255,255,255,.7); border: 1px solid rgba(176,0,32,.35); border-radius: 6px; padding: 8px 12px; }
         .login-actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
-        .login-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px 8px 28px; border-radius: 999px; border: 1.5px solid #fff; background: transparent; color: #fff; font-size: 14px; letter-spacing: 4px; cursor: pointer; min-width: 170px; transition: all .15s; }
+        .login-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px 8px 28px; border-radius: 999px; border: 1.5px solid ${TEXT}; background: transparent; color: ${TEXT}; font-size: 14px; letter-spacing: 4px; cursor: pointer; min-width: 170px; transition: all .15s; }
+        .login-btn:hover:not(:disabled) { background: rgba(45,58,82,.08); }
         .login-btn:disabled { opacity: .55; cursor: not-allowed; }
-        .login-btn-circle { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; font-weight: 600; padding-bottom: 3px; }
-        .login-forgot { background: transparent; border: none; cursor: pointer; padding: 4px; opacity: .85; display: inline-flex; align-items: center; }
+        .login-btn-circle { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid ${TEXT}; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; font-weight: 600; padding-bottom: 3px; }
+        .login-forgot { background: transparent; border: none; cursor: pointer; padding: 4px; color: ${TEXT}; opacity: .85; display: inline-flex; align-items: center; }
         .login-forgot:hover { opacity: 1; }
 
         @media (max-width: 720px) {
@@ -115,8 +116,8 @@ export default function LoginForm() {
                 </button>
 
                 <button type="button" className="login-forgot"
-                        onClick={handleForgotPassword} title="忘記密碼">
-                  <Image src="/icon-forgot-password.png" alt="忘記密碼" width={36} height={36} />
+                        onClick={handleForgotPassword} title="忘記密碼" aria-label="忘記密碼">
+                  <KeyRound size={28} strokeWidth={1.6} />
                 </button>
               </div>
             </form>
