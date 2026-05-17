@@ -56,16 +56,20 @@ interface Props {
   displayName: string | null
   avatarUrl:   string | null
   userId:      string
+  allowedPages: string[]
 }
 
-export default function Sidebar({ role, email, displayName, avatarUrl, userId }: Props) {
+export default function Sidebar({ role, email, displayName, avatarUrl, userId, allowedPages }: Props) {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
 
+  const allowed = new Set(allowedPages)
   const visibleGroups = nav
     .map(g => ({
       ...g,
-      items: g.items.filter(i => !i.roles || i.roles.includes(role)),
+      items: g.items.filter(i =>
+        (!i.roles || i.roles.includes(role)) && allowed.has(i.href)
+      ),
     }))
     .filter(g => (!g.roles || g.roles.includes(role)) && g.items.length > 0)
 
@@ -166,7 +170,7 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId }:
         padding: '6px 10px', borderTop: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        {role === 'admin' ? (
+        {allowed.has('/settings') ? (
           <Link href="/settings" title="設定" style={{
             width: 28, height: 28, padding: 0,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

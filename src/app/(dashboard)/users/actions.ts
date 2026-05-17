@@ -2,17 +2,19 @@
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getCurrentProfile } from '@/lib/auth'
+import { sanitizeAllowedPages } from '@/lib/permissions'
 
 export type Role = 'admin' | 'driver'
 
 export type UserInput = {
-  email:        string
-  password?:    string         // required on create only
-  username:     string | null
-  role:         Role
-  driver_id:    string | null
-  display_name: string | null
-  is_active:    boolean
+  email:         string
+  password?:     string         // required on create only
+  username:      string | null
+  role:          Role
+  driver_id:     string | null
+  display_name:  string | null
+  is_active:     boolean
+  allowed_pages: string[] | null
 }
 
 const USERNAME_RE = /^[a-z0-9._]{3,30}$/
@@ -61,12 +63,13 @@ export async function createUser(input: UserInput) {
   if (e1 || !created.user) return { error: e1?.message ?? '建立帳號失敗' }
 
   const { error: e2 } = await supabase.from('user_profiles').insert({
-    id:           created.user.id,
-    role:         input.role,
+    id:            created.user.id,
+    role:          input.role,
     username,
-    driver_id:    input.role === 'driver' ? input.driver_id : null,
-    display_name: input.display_name?.trim() || null,
-    is_active:    input.is_active,
+    driver_id:     input.role === 'driver' ? input.driver_id : null,
+    display_name:  input.display_name?.trim() || null,
+    is_active:     input.is_active,
+    allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages),
   })
   if (e2) {
     // Roll back the auth user so we don't leave orphans.
@@ -102,11 +105,12 @@ export async function updateUser(id: string, input: Omit<UserInput, 'password'>)
   if (e1) return { error: e1.message }
 
   const { error: e2 } = await supabase.from('user_profiles').update({
-    role:         input.role,
+    role:          input.role,
     username,
-    driver_id:    input.role === 'driver' ? input.driver_id : null,
-    display_name: input.display_name?.trim() || null,
-    is_active:    input.is_active,
+    driver_id:     input.role === 'driver' ? input.driver_id : null,
+    display_name:  input.display_name?.trim() || null,
+    is_active:     input.is_active,
+    allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages),
   }).eq('id', id)
   if (e2) return { error: e2.message }
 
@@ -135,5 +139,106 @@ export async function deleteUser(id: string) {
   const { error } = await supabase.auth.admin.deleteUser(id)
   if (error) return { error: error.message }
   revalidatePath('/users')
+  return { error: null }
+}
+
+/**
+ * Build the canonical login credentials from a driver's phone:
+ *   email    = {digits}@yulang.local
+ *   username = {digits}
+ *   password = last 6 digits, left-padded to 6 if shorter
+ * Returns null if phone is missing or has no digits.
+ */
+export function deriveDriverCredentials(phone: string | null): {
+  email: string; username: string; password: string
+} | null {
+  const digits = (phone ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  const password = digits.length >= 6 ? digits.slice(-6) : digits.padStart(6, '0')
+  return {
+    email:    `${digits}@yulang.local`,
+    username: digits,
+    password,
+  }
+}
+
+/**
+ * Create a Supabase auth user + user_profiles row for an existing driver.
+ * - Skips silently when driver already has a user_profile, when phone is empty,
+ *   or when an account with the derived email already exists.
+ * - Called both from createDriver (auto) and from the Pending list UI (manual).
+ * Caller may set { adminGuard: false } to allow internal callers to bypass the
+ * admin check; default true for direct UI invocations.
+ */
+export async function createUserForDriver(
+  driverId: string,
+  opts: { adminGuard?: boolean } = {},
+) {
+  if (opts.adminGuard !== false) {
+    const guard = await ensureAdmin()
+    if (guard.error) return { error: guard.error, skipped: false }
+  }
+
+  const supabase = createServiceClient()
+
+  const { data: existingProfile } = await supabase
+    .from('user_profiles')
+    .select('id').eq('driver_id', driverId).maybeSingle()
+  if (existingProfile) return { error: null, skipped: true, reason: 'already-has-account' }
+
+  const { data: driver, error: dErr } = await supabase
+    .from('drivers')
+    .select('id, name, phone')
+    .eq('id', driverId)
+    .maybeSingle()
+  if (dErr || !driver) return { error: dErr?.message ?? '找不到司機', skipped: false }
+
+  const cred = deriveDriverCredentials(driver.phone)
+  if (!cred) return { error: null, skipped: true, reason: 'no-phone' }
+
+  const { data: created, error: e1 } = await supabase.auth.admin.createUser({
+    email: cred.email,
+    password: cred.password,
+    email_confirm: true,
+  })
+  if (e1 || !created.user) {
+    // Email might already exist if admin created manually first; treat as skip.
+    if (e1?.message?.toLowerCase().includes('already')) {
+      return { error: null, skipped: true, reason: 'email-exists' }
+    }
+    return { error: e1?.message ?? '建立帳號失敗', skipped: false }
+  }
+
+  const { error: e2 } = await supabase.from('user_profiles').insert({
+    id:            created.user.id,
+    role:          'driver' as Role,
+    username:      cred.username,
+    driver_id:     driverId,
+    display_name:  driver.name,
+    is_active:     true,
+    allowed_pages: null,
+  })
+  if (e2) {
+    await supabase.auth.admin.deleteUser(created.user.id)
+    return { error: e2.message, skipped: false }
+  }
+
+  revalidatePath('/people')
+  return { error: null, skipped: false, credentials: cred }
+}
+
+/** Clear LINE binding from BOTH drivers and user_profiles in one shot. */
+export async function unbindLine(driverId: string) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error }
+
+  const supabase = createServiceClient()
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    supabase.from('drivers').update({ line_user_id: null }).eq('id', driverId),
+    supabase.from('user_profiles').update({ line_user_id: null }).eq('driver_id', driverId),
+  ])
+  if (e1 || e2) return { error: (e1 ?? e2)!.message }
+
+  revalidatePath('/people')
   return { error: null }
 }

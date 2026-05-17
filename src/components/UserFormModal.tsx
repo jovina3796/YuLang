@@ -3,15 +3,18 @@ import { useState } from 'react'
 import { PencilLine, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createUser, updateUser, type UserInput, type Role } from '@/app/(dashboard)/users/actions'
+import { NAV_HREFS, NAV_LABELS, ROLE_DEFAULTS, type NavHref } from '@/lib/permissions'
 
 export type UserRow = {
-  id:           string
-  email:        string
-  username:     string | null
-  role:         Role
-  driver_id:    string | null
-  display_name: string | null
-  is_active:    boolean
+  id:            string
+  email:         string
+  username:      string | null
+  role:          Role
+  driver_id:     string | null
+  display_name:  string | null
+  is_active:     boolean
+  line_user_id:  string | null
+  allowed_pages: string[] | null
 }
 
 export type DriverOption = { id: string; name: string; employee_no: string | null }
@@ -37,11 +40,35 @@ export default function UserFormModal({ mode, initial, drivers, trigger }: Props
   const [displayName, setDisplayName] = useState(initial?.display_name ?? '')
   const [isActive,    setIsActive]    = useState<boolean>(initial?.is_active ?? true)
 
+  // null = 沿用角色預設（全勾），陣列 = 顯式子集
+  const initialAllowed: Set<NavHref> = (() => {
+    const role0 = initial?.role ?? 'admin'
+    const baseSet = new Set<NavHref>(ROLE_DEFAULTS[role0])
+    if (!initial?.allowed_pages) return baseSet
+    return new Set<NavHref>(initial.allowed_pages.filter(h => baseSet.has(h as NavHref)) as NavHref[])
+  })()
+  const [allowed, setAllowed] = useState<Set<NavHref>>(initialAllowed)
+
   function resetForm() {
     if (mode === 'create') {
       setEmail(''); setUsername(''); setPassword(''); setRole('admin')
       setDriverId(''); setDisplayName(''); setIsActive(true)
+      setAllowed(new Set<NavHref>(ROLE_DEFAULTS.admin))
     }
+  }
+
+  function changeRole(next: Role) {
+    setRole(next)
+    // 切換角色時重置勾選為新角色預設集合（避免 driver 留有 admin 頁面）
+    setAllowed(new Set<NavHref>(ROLE_DEFAULTS[next]))
+  }
+
+  function togglePage(href: NavHref) {
+    setAllowed(prev => {
+      const next = new Set(prev)
+      if (next.has(href)) next.delete(href); else next.add(href)
+      return next
+    })
   }
 
   async function handleSubmit() {
@@ -53,13 +80,19 @@ export default function UserFormModal({ mode, initial, drivers, trigger }: Props
       alert('用戶名僅允許 3-30 個小寫英數、底線、點'); return
     }
 
+    const roleDefaults = new Set<NavHref>(ROLE_DEFAULTS[role])
+    const allFull = allowed.size === roleDefaults.size &&
+      Array.from(roleDefaults).every(h => allowed.has(h))
+    const allowedPagesPayload = allFull ? null : Array.from(allowed)
+
     const base = {
-      email:        email.trim(),
-      username:     normalizedUsername || null,
+      email:         email.trim(),
+      username:      normalizedUsername || null,
       role,
-      driver_id:    role === 'driver' ? driverId || null : null,
-      display_name: displayName.trim() || null,
-      is_active:    isActive,
+      driver_id:     role === 'driver' ? driverId || null : null,
+      display_name:  displayName.trim() || null,
+      is_active:     isActive,
+      allowed_pages: allowedPagesPayload,
     }
     setSaving(true)
     const { error } = mode === 'create'
@@ -134,7 +167,7 @@ export default function UserFormModal({ mode, initial, drivers, trigger }: Props
             <div style={G2}>
               <label style={L}>
                 <span style={LT}>角色</span>
-                <select className="input" value={role} onChange={e => setRole(e.target.value as Role)}>
+                <select className="input" value={role} onChange={e => changeRole(e.target.value as Role)}>
                   <option value="admin">管理員</option>
                   <option value="driver">司機</option>
                 </select>
@@ -161,6 +194,31 @@ export default function UserFormModal({ mode, initial, drivers, trigger }: Props
                 </select>
               </label>
             )}
+
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 4 }}>
+                可見頁面
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+                依角色預設集合勾選；全勾＝沿用角色預設、可隨時調整
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6,
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: 10,
+              }}>
+                {NAV_HREFS.filter(h => ROLE_DEFAULTS[role].includes(h)).map(h => (
+                  <label key={h} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontSize: 12, cursor: 'pointer',
+                  }}>
+                    <input type="checkbox" checked={allowed.has(h)} onChange={() => togglePage(h)} />
+                    <span>{NAV_LABELS[h]}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{h}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button className="btn" onClick={() => { setOpen(false); resetForm() }}>取消</button>

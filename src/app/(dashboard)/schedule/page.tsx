@@ -52,7 +52,7 @@ export default async function SchedulePage({
       .lt('scheduled_date', today)
       .order('scheduled_date', { ascending: false })
       .limit(50),
-    supabase.from('drivers').select('id, name').eq('status', 'active')
+    supabase.from('drivers').select('id, name').eq('status', 'active').eq('show_in_schedule', true)
       .order('display_order', { ascending: true, nullsFirst: false }).order('name'),
     supabase.from('vehicles').select('id, plate_number')
       .order('display_order', { ascending: true, nullsFirst: false }).order('plate_number'),

@@ -51,6 +51,7 @@ async function getData() {
       .order('plate_number'),
     supabase.from('drivers')
       .select('id, name, status')
+      .eq('show_in_dashboard', true)
       .order('display_order', { ascending: true, nullsFirst: false })
       .order('name'),
     supabase.from('schedules')

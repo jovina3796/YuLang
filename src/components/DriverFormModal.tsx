@@ -26,6 +26,8 @@ export type DriverRow = {
   default_vehicle_id:   string | null
   status:               string
   display_order:        number | null
+  show_in_dashboard:    boolean
+  show_in_schedule:     boolean
 }
 
 interface Props {
@@ -61,6 +63,11 @@ export default function DriverFormModal({ vehicles, mode, initial, trigger }: Pr
   const [defaultVehicleId, setDefaultVehicleId] = useState(initial?.default_vehicle_id ?? '')
   const [status,     setStatus]     = useState(initial?.status ?? 'active')
   const [displayOrder, setDisplayOrder] = useState<number | ''>(initial?.display_order ?? '')
+  const [showDashboard, setShowDashboard] = useState<boolean>(initial?.show_in_dashboard ?? true)
+  const [showSchedule,  setShowSchedule]  = useState<boolean>(initial?.show_in_schedule  ?? true)
+
+  // 離職時自動關閉兩個顯示開關（與 DB trigger 行為對齊）
+  const inactive = status === 'inactive'
 
   function resetForm() {
     if (mode === 'create') {
@@ -71,6 +78,7 @@ export default function DriverFormModal({ vehicles, mode, initial, trigger }: Pr
       setBankName(''); setBankAccount('')
       setDefaultVehicleId('')
       setStatus('active'); setDisplayOrder('')
+      setShowDashboard(true); setShowSchedule(true)
     }
   }
 
@@ -97,6 +105,8 @@ export default function DriverFormModal({ vehicles, mode, initial, trigger }: Pr
       default_vehicle_id:   defaultVehicleId || null,
       status,
       display_order: displayOrder === '' ? null : Number(displayOrder),
+      show_in_dashboard: inactive ? false : showDashboard,
+      show_in_schedule:  inactive ? false : showSchedule,
     }
     setSaving(true)
     const { error } = mode === 'create'
@@ -269,6 +279,25 @@ export default function DriverFormModal({ vehicles, mode, initial, trigger }: Pr
               <input type="number" className="input" value={displayOrder}
                      onChange={e => setDisplayOrder(e.target.value === '' ? '' : Number(e.target.value))} />
             </label>
+
+            <div style={{
+              borderTop: '1px solid var(--border)', paddingTop: 12,
+              display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap',
+              opacity: inactive ? 0.5 : 1,
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>顯示範圍</span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: inactive ? 'not-allowed' : 'pointer' }}>
+                <input type="checkbox" checked={inactive ? false : showDashboard} disabled={inactive}
+                       onChange={e => setShowDashboard(e.target.checked)} />
+                <span>儀表板人員管理</span>
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: inactive ? 'not-allowed' : 'pointer' }}>
+                <input type="checkbox" checked={inactive ? false : showSchedule} disabled={inactive}
+                       onChange={e => setShowSchedule(e.target.checked)} />
+                <span>排班設定</span>
+              </label>
+              {inactive && <span style={{ fontSize: 11, color: 'var(--text3)' }}>離職司機自動隱藏</span>}
+            </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button className="btn" onClick={() => { setOpen(false); resetForm() }}>取消</button>

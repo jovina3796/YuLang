@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
+import { createUserForDriver } from '@/app/(dashboard)/users/actions'
 
 export type DriverInput = {
   employee_no:          string | null
@@ -23,13 +24,27 @@ export type DriverInput = {
   default_vehicle_id:   string | null
   status:               string
   display_order:        number | null
+  show_in_dashboard:    boolean
+  show_in_schedule:     boolean
 }
 
 export async function createDriver(input: DriverInput) {
   const supabase = createServiceClient()
-  const { error } = await supabase.from('drivers').insert(input)
+  const { data, error } = await supabase
+    .from('drivers')
+    .insert(input)
+    .select('id')
+    .single()
   if (error) return { error: error.message }
-  revalidatePath('/drivers')
+
+  // Best-effort: spin up a login account for the new driver. Skips silently
+  // when phone is missing or email already exists; never blocks driver creation.
+  if (data?.id) {
+    const r = await createUserForDriver(data.id, { adminGuard: false })
+    revalidatePath('/people')
+    return { error: null, accountResult: r }
+  }
+  revalidatePath('/people')
   return { error: null }
 }
 

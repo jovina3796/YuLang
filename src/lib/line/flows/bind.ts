@@ -73,18 +73,32 @@ export async function handleBindingInput(
       await reply(replyToken, [textMessage('綁定失敗，請稍後再試。')])
       return
     }
+    // Mirror onto user_profiles so dashboard / unbind UI stays in sync.
+    await supabase
+      .from('user_profiles')
+      .update({ line_user_id: lineUserId })
+      .eq('driver_id', existing.id)
     await resetSession(lineUserId)
     await reply(replyToken, [textMessage(`綁定成功，${existing.name} 您好。\n${MENU_HINT}`)])
     return
   }
 
-  const { error: insErr } = await supabase
+  const { data: inserted, error: insErr } = await supabase
     .from('drivers')
     .insert({ name, phone, line_user_id: lineUserId, status: 'active' })
+    .select('id')
+    .single()
   if (insErr) {
     console.error('[bind] insert error', insErr)
     await reply(replyToken, [textMessage('建檔失敗，請稍後再試或聯絡管理員。')])
     return
+  }
+  // If a profile already exists for this driver_id (rare), keep it in sync too.
+  if (inserted?.id) {
+    await supabase
+      .from('user_profiles')
+      .update({ line_user_id: lineUserId })
+      .eq('driver_id', inserted.id)
   }
   await resetSession(lineUserId)
   await reply(replyToken, [textMessage(`已為您建立資料，${name} 您好。\n其餘人事資料請管理員後台補齊。\n${MENU_HINT}`)])

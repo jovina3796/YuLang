@@ -3,6 +3,7 @@ import DriverFormModal from '@/components/DriverFormModal'
 import DriverRowActions from '@/components/DriverRowActions'
 import UserFormModal from '@/components/UserFormModal'
 import UserRowActions from '@/components/UserRowActions'
+import PendingDriverAccountList from '@/components/PendingDriverAccountList'
 import SortableTh from '@/components/SortableTh'
 import PeopleTabs from '@/components/PeopleTabs'
 import { getCurrentProfile } from '@/lib/auth'
@@ -153,6 +154,8 @@ async function DriversTab({ sortField, ascending }: { sortField: string; ascendi
                       default_vehicle_id: d.default_vehicle_id ?? null,
                       status: d.status,
                       display_order: d.display_order ?? null,
+                      show_in_dashboard: d.show_in_dashboard ?? true,
+                      show_in_schedule:  d.show_in_schedule  ?? true,
                     }} />
                   </td>
                 </tr>
@@ -171,19 +174,27 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
 
   const { data: profiles } = await supabase
     .from('user_profiles')
-    .select('id, username, role, driver_id, display_name, is_active, created_at')
+    .select('id, username, role, driver_id, display_name, is_active, created_at, line_user_id, allowed_pages')
 
   const { data: drivers } = await supabase
     .from('drivers')
-    .select('id, name, employee_no')
+    .select('id, name, employee_no, phone, line_user_id')
     .order('display_order', { ascending: true, nullsFirst: false })
     .order('name')
 
   const { data: usersList } = await supabase.auth.admin.listUsers({ perPage: 1000 })
   const emailById = new Map<string, string>()
   usersList.users.forEach(u => { if (u.email) emailById.set(u.id, u.email) })
-  const driverNameById = new Map<string, string>()
-  drivers?.forEach(d => driverNameById.set(d.id, d.name))
+  const driverById = new Map<string, { name: string; line_user_id: string | null }>()
+  drivers?.forEach(d => driverById.set(d.id, { name: d.name, line_user_id: d.line_user_id ?? null }))
+
+  // Pending：在 user_profiles 找不到對應 driver_id 的司機
+  const claimedDriverIds = new Set(
+    (profiles ?? []).map(p => p.driver_id).filter((x): x is string => !!x),
+  )
+  const pendingDrivers = (drivers ?? [])
+    .filter(d => !claimedDriverIds.has(d.id))
+    .map(d => ({ id: d.id, name: d.name, employee_no: d.employee_no ?? null, phone: d.phone ?? null }))
 
   type Row = {
     id: string
@@ -194,18 +205,26 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
     driver_name: string
     display_name: string | null
     is_active: boolean
+    line_user_id: string | null
+    allowed_pages: string[] | null
   }
 
-  const rows: Row[] = (profiles ?? []).map(p => ({
-    id: p.id,
-    email: emailById.get(p.id) ?? '',
-    username: p.username ?? null,
-    role: p.role,
-    driver_id: p.driver_id,
-    driver_name: p.driver_id ? (driverNameById.get(p.driver_id) ?? '') : '',
-    display_name: p.display_name,
-    is_active: p.is_active,
-  }))
+  const rows: Row[] = (profiles ?? []).map(p => {
+    const drv = p.driver_id ? driverById.get(p.driver_id) : undefined
+    return {
+      id: p.id,
+      email: emailById.get(p.id) ?? '',
+      username: p.username ?? null,
+      role: p.role,
+      driver_id: p.driver_id,
+      driver_name: drv?.name ?? '',
+      display_name: p.display_name,
+      is_active: p.is_active,
+      // 以 user_profiles 為準，若沒有但司機表有，仍顯示為已綁
+      line_user_id: p.line_user_id ?? drv?.line_user_id ?? null,
+      allowed_pages: (p.allowed_pages ?? null) as string[] | null,
+    }
+  })
 
   const getKey = (r: Row): string | number => {
     switch (sortField) {
@@ -214,6 +233,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
       case 'display_name': return r.display_name ?? ''
       case 'role':         return r.role
       case 'driver':       return r.driver_name
+      case 'line':         return r.line_user_id ? 1 : 0
       case 'is_active':    return r.is_active ? 1 : 0
       default:             return ''
     }
@@ -230,6 +250,8 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
 
   return (
     <>
+      <PendingDriverAccountList drivers={pendingDrivers} />
+
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <UserFormModal mode="create" drivers={driverOptions} />
       </div>
@@ -239,13 +261,14 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
         </div>
         <table style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
-            <col style={{ width: '20%' }} />
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '10%' }} />
           </colgroup>
           <thead>
             <tr>
@@ -254,13 +277,14 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
               <SortableTh field="display_name" defaultField="email" defaultDir="asc">顯示名稱</SortableTh>
               <SortableTh field="role"         defaultField="email" defaultDir="asc">角色</SortableTh>
               <SortableTh field="driver"       defaultField="email" defaultDir="asc">對應司機</SortableTh>
+              <SortableTh field="line"         defaultField="email" defaultDir="asc">LINE 綁定</SortableTh>
               <SortableTh field="is_active"    defaultField="email" defaultDir="asc">狀態</SortableTh>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {!sortedRows.length ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
             ) : sortedRows.map(r => {
               const role = ROLE_LABEL[r.role] ?? { label: r.role, cls: 'badge-blue' }
               return (
@@ -270,6 +294,11 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
                   <td style={{ textAlign: 'center' }}>{r.display_name ?? ''}</td>
                   <td style={{ textAlign: 'center' }}><span className={`badge ${role.cls}`}>{role.label}</span></td>
                   <td style={{ textAlign: 'center' }}>{r.driver_name}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {r.line_user_id
+                      ? <span className="badge badge-green">已綁定</span>
+                      : <span className="badge badge-amber">未綁定</span>}
+                  </td>
                   <td style={{ textAlign: 'center' }}>
                     {r.is_active
                       ? <span className="badge badge-green">啟用</span>
@@ -285,6 +314,8 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
                         driver_id: r.driver_id,
                         display_name: r.display_name,
                         is_active: r.is_active,
+                        line_user_id: r.line_user_id,
+                        allowed_pages: r.allowed_pages,
                       }}
                       drivers={driverOptions}
                       isSelf={me?.id === r.id}
