@@ -7,7 +7,7 @@ import { getCurrentProfile } from '@/lib/auth'
 const ADMIN_ONLY_PREFIXES = [
   '/trips', '/vehicles', '/drivers', '/people', '/schedule',
   '/fuel', '/maintenance', '/inspection',
-  '/reports', '/fixed', '/misc', '/vendors', '/rates',
+  '/reports', '/fixed', '/misc', '/finance', '/vendors', '/rates', '/vendor-info',
   '/settings', '/users', '/payment-aliases',
 ]
 

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ScrollText, Truck, Users, CalendarRange,
   Fuel, Wrench, ShieldCheck,
-  ChartColumnIncreasing, ReceiptText, Wallet, FileSpreadsheet, Building2, Tags,
+  ChartColumnIncreasing, ReceiptText, FileSpreadsheet, Building2,
   HandCoins, PlaneTakeoff, ClockArrowUp,
   Settings, LogOut,
 } from 'lucide-react'
@@ -36,11 +36,9 @@ const nav: NavGroup[] = [
   ]},
   { section: '財務相關', roles: ['admin'], items: [
     { href: '/reports',      Icon: ChartColumnIncreasing, label: '統計報表' },
-    { href: '/fixed',        Icon: ReceiptText,     label: '固定收支' },
-    { href: '/misc',         Icon: Wallet,          label: '其他收支' },
+    { href: '/finance',      Icon: ReceiptText,     label: '收支報表' },
     { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
-    { href: '/vendors',      Icon: Building2,       label: '廠商設定' },
-    { href: '/rates',        Icon: Tags,            label: '運費設定' },
+    { href: '/vendor-info',  Icon: Building2,       label: '廠商資訊' },
   ]},
   { section: '簽核項目', items: [
     { href: '/claims',       Icon: HandCoins,       label: '請款簽核' },
