@@ -40,7 +40,9 @@
       "Bash(git -C 'D:\\\\Projects\\\\yulang-erp' remote -v)",
       "Bash(git -C 'D:\\\\Projects\\\\yulang-erp' config user.name \"jovina3796\")",
       "Bash(git -C 'D:\\\\Projects\\\\yulang-erp' config user.email \"jovina3796@users.noreply.github.com\")",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(sed -n '85,115p' src/components/Sidebar.tsx)",
+      "Bash(sed -n '50,60p' src/components/Sidebar.tsx)"
     ]
   }
 }

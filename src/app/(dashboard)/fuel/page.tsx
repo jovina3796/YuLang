@@ -3,6 +3,8 @@ import FuelFormModal from '@/components/FuelFormModal'
 import FuelRowActions from '@/components/FuelRowActions'
 import FuelDateFilter from '@/components/FuelDateFilter'
 import FuelImportExport from '@/components/FuelImportExport'
+import PaymentAliasFormModal from '@/components/PaymentAliasFormModal'
+import PaymentAliasRowActions from '@/components/PaymentAliasRowActions'
 import SortableTh from '@/components/SortableTh'
 import { Paperclip } from 'lucide-react'
 
@@ -28,9 +30,10 @@ export default async function FuelPage({
   if (to)      q = q.lte('logged_at', `${to}T23:59:59.999`)
   if (vehicle) q = q.eq('vehicle_id', vehicle)
 
-  const [{ data: logs }, { data: vehicles }] = await Promise.all([
+  const [{ data: logs }, { data: vehicles }, { data: aliases }] = await Promise.all([
     q,
     supabase.from('vehicles').select('id, plate_number').order('display_order', { ascending: true, nullsFirst: false }).order('plate_number'),
+    supabase.from('payment_aliases').select('id, alias, target, created_at').order('created_at', { ascending: false }),
   ])
 
   const monthly = logs?.filter(l => l.logged_at >= monthStart) ?? []
@@ -145,6 +148,38 @@ export default async function FuelPage({
                     }}
                     vehicles={vehicles ?? []}
                   />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">付款別名</div>
+            <div className="card-sub">司機在 LINE 加油回報輸入的關鍵字 → 對應寫入的付款方式（最長關鍵字優先）</div>
+          </div>
+          <PaymentAliasFormModal mode="create" />
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>關鍵字</th>
+              <th style={{ textAlign: 'left' }}>對應付款方式</th>
+              <th style={{ width: 80, textAlign: 'right' }}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!(aliases ?? []).length ? (
+              <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text3)', padding: 24 }}>尚無資料</td></tr>
+            ) : (aliases ?? []).map(a => (
+              <tr key={a.id}>
+                <td style={{ textAlign: 'left' }}>{a.alias}</td>
+                <td style={{ textAlign: 'left' }}>{a.target}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <PaymentAliasRowActions row={{ id: a.id, alias: a.alias, target: a.target }} />
                 </td>
               </tr>
             ))}

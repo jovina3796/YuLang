@@ -8,7 +8,7 @@ import {
   Fuel, Wrench, ShieldCheck,
   ChartColumnIncreasing, ReceiptText, Wallet, FileSpreadsheet, Building2, Tags,
   HandCoins, PlaneTakeoff, ClockArrowUp,
-  Settings, LogOut, UserCog, CreditCard,
+  Settings, LogOut, UserCog,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
@@ -51,7 +51,6 @@ const nav: NavGroup[] = [
     { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
   ]},
   { section: '系統管理', roles: ['admin'], items: [
-    { href: '/payment-aliases', Icon: CreditCard, label: '付款別名' },
     { href: '/users',        Icon: UserCog,       label: '使用者管理' },
   ]},
 ]
@@ -87,21 +86,15 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId }:
     }}>
       {/* Brand */}
       <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32,
-            borderRadius: 7, overflow: 'hidden',
-            background: '#5a6580',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <Image src="/logo.png" alt="馭浪物流" width={32} height={32} priority />
-          </div>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '.5px' }}>馭浪物流</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>ERP v1.0</div>
-          </div>
-        </div>
+        <Image
+          src="/yl.png"
+          alt="馭浪物流 Yulang Logistics Ltd."
+          width={168}
+          height={80}
+          priority
+          style={{ width: '100%', height: 'auto', display: 'block' }}
+        />
+        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 4, textAlign: 'right' }}>ERP v1.0</div>
       </div>
 
       {/* Nav */}
