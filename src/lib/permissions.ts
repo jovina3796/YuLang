@@ -41,13 +41,18 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/settings':     '系統設定',
 }
 
-export type RoleDefaults = Record<Role, readonly string[]>
+export type RoleDefaults = Record<string, readonly string[]>
 
 // Static fallback used when DB read fails or in contexts where loading is not
 // available. Admin-editable values live in role_permissions table (migration 028).
+// Custom roles default to /dashboard only when no DB row is loaded.
 export const ROLE_DEFAULTS_FALLBACK: RoleDefaults = {
   admin:  NAV_HREFS,
   driver: ['/dashboard', '/payroll', '/claims', '/leaves', '/overtimes'],
+}
+
+function defaultsFor(role: Role, defaults: RoleDefaults): readonly string[] {
+  return defaults[role] ?? ['/dashboard']
 }
 
 // === Dashboard sections (Q2) ===
@@ -80,7 +85,7 @@ export const DASHBOARD_SECTION_LABELS: Record<DashboardSection, string> = {
   login_info:       '登入資訊',
 }
 
-export type RoleDashboardSections = Record<Role, readonly DashboardSection[]>
+export type RoleDashboardSections = Record<string, readonly DashboardSection[]>
 
 export const DASHBOARD_SECTIONS_FALLBACK: RoleDashboardSections = {
   admin:  DASHBOARD_SECTIONS,
@@ -104,7 +109,7 @@ export function resolveAllowedPages(
   defaults: RoleDefaults = ROLE_DEFAULTS_FALLBACK,
 ): Set<NavHref> {
   const roleSet = new Set<NavHref>(
-    defaults[p.role].filter((h): h is NavHref => (NAV_HREFS as readonly string[]).includes(h)),
+    defaultsFor(p.role, defaults).filter((h): h is NavHref => (NAV_HREFS as readonly string[]).includes(h)),
   )
   if (!p.allowed_pages) return roleSet
   const out = new Set<NavHref>()
@@ -135,7 +140,7 @@ export function sanitizeAllowedPages(
   defaults: RoleDefaults = ROLE_DEFAULTS_FALLBACK,
 ): string[] | null {
   if (!raw) return null
-  const upperBound = new Set<string>(defaults[role])
+  const upperBound = new Set<string>(defaultsFor(role, defaults))
   const set = new Set<string>()
   for (const h of raw) if (upperBound.has(h)) set.add(h)
   // null means "inherit role default" — store null when full set is selected

@@ -6,7 +6,7 @@ import { NAV_HREFS, sanitizeAllowedPages, sanitizeDashboardSections } from '@/li
 import { loadRoleDefaults } from '@/lib/rolePermissions.server'
 import { deriveDriverCredentials } from '@/lib/driverCredentials'
 
-export type Role = 'admin' | 'driver'
+export type Role = string
 
 export type UserInput = {
   email:         string
@@ -268,7 +268,11 @@ export async function unbindLine(driverId: string) {
 export async function saveRoleDefaults(role: Role, allowedPages: string[]) {
   const guard = await ensureAdmin()
   if (guard.error) return { error: guard.error }
-  if (role !== 'admin' && role !== 'driver') return { error: '無效的角色' }
+
+  const supabase = createServiceClient()
+  const { data: roleRow } = await supabase
+    .from('roles').select('key').eq('key', role).maybeSingle()
+  if (!roleRow) return { error: '無效的角色' }
 
   const valid = new Set<string>(NAV_HREFS)
   const cleaned = Array.from(new Set(allowedPages.filter(h => valid.has(h))))
@@ -276,7 +280,6 @@ export async function saveRoleDefaults(role: Role, allowedPages: string[]) {
   // somewhere they can't see anything.
   if (!cleaned.includes('/dashboard')) cleaned.unshift('/dashboard')
 
-  const supabase = createServiceClient()
   const { error } = await supabase
     .from('role_permissions')
     .upsert({ role, allowed_pages: cleaned, updated_at: new Date().toISOString() })
@@ -290,11 +293,14 @@ export async function saveRoleDefaults(role: Role, allowedPages: string[]) {
 export async function saveRoleDashboardSections(role: Role, sections: string[]) {
   const guard = await ensureAdmin()
   if (guard.error) return { error: guard.error }
-  if (role !== 'admin' && role !== 'driver') return { error: '無效的角色' }
+
+  const supabase = createServiceClient()
+  const { data: roleRow } = await supabase
+    .from('roles').select('key').eq('key', role).maybeSingle()
+  if (!roleRow) return { error: '無效的角色' }
 
   const cleaned = sanitizeDashboardSections(sections)
 
-  const supabase = createServiceClient()
   // Upsert without clobbering allowed_pages: if row missing we still need it
   // to exist before we can update sections, so first ensure row, then update.
   const { error: upErr } = await supabase
@@ -305,4 +311,97 @@ export async function saveRoleDashboardSections(role: Role, sections: string[]) 
 
   revalidatePath('/dashboard')
   return { error: null }
+}
+
+const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,30}$/
+
+export async function createRole(input: { key: string; label: string; badge_class: string }) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error }
+
+  const key   = input.key.trim().toLowerCase()
+  const label = input.label.trim()
+  const badge = input.badge_class.trim() || 'badge-blue'
+  if (!ROLE_KEY_RE.test(key)) return { error: 'key 僅允許小寫英數字與底線，且須以字母開頭（2-31 字）' }
+  if (!label)                 return { error: '請輸入顯示名稱' }
+
+  const supabase = createServiceClient()
+  const { data: dup } = await supabase
+    .from('roles').select('key').eq('key', key).maybeSingle()
+  if (dup) return { error: '角色 key 已存在' }
+
+  const { error: e1 } = await supabase
+    .from('roles')
+    .insert({ key, label, badge_class: badge, is_builtin: false, sort_order: 100 })
+  if (e1) return { error: e1.message }
+
+  const { error: e2 } = await supabase
+    .from('role_permissions')
+    .insert({ role: key, allowed_pages: ['/dashboard'], allowed_dashboard_sections: [] })
+  if (e2) {
+    await supabase.from('roles').delete().eq('key', key)
+    return { error: e2.message }
+  }
+
+  revalidatePath('/', 'layout')
+  return { error: null }
+}
+
+export async function updateRole(key: string, patch: { label?: string; badge_class?: string }) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error }
+
+  const supabase = createServiceClient()
+  const update: Record<string, unknown> = {}
+  if (patch.label !== undefined) {
+    const v = patch.label.trim()
+    if (!v) return { error: '請輸入顯示名稱' }
+    update.label = v
+  }
+  if (patch.badge_class !== undefined) {
+    update.badge_class = patch.badge_class.trim() || 'badge-blue'
+  }
+  if (!Object.keys(update).length) return { error: null }
+
+  const { error } = await supabase.from('roles').update(update).eq('key', key)
+  if (error) return { error: error.message }
+
+  revalidatePath('/', 'layout')
+  return { error: null }
+}
+
+/**
+ * Delete a custom role. Refuses built-ins. Reassigns any user_profiles still
+ * pointing at this role to 'driver' inside a single Postgres function so the
+ * RESTRICT FK never fires. Returns the number of accounts migrated.
+ */
+export async function deleteRole(key: string) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error, migrated: 0 }
+
+  const supabase = createServiceClient()
+  const { data: row } = await supabase
+    .from('roles').select('key, is_builtin').eq('key', key).maybeSingle()
+  if (!row)            return { error: '角色不存在', migrated: 0 }
+  if (row.is_builtin)  return { error: '內建角色不可刪除', migrated: 0 }
+
+  const { data, error } = await supabase.rpc('delete_role', { p_key: key })
+  if (error) return { error: error.message, migrated: 0 }
+
+  revalidatePath('/', 'layout')
+  return { error: null, migrated: (data as number) ?? 0 }
+}
+
+/** Count user_profiles still attached to a role — used for the delete confirm dialog. */
+export async function countUsersInRole(key: string) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error, count: 0 }
+
+  const supabase = createServiceClient()
+  const { count, error } = await supabase
+    .from('user_profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', key)
+  if (error) return { error: error.message, count: 0 }
+  return { error: null, count: count ?? 0 }
 }

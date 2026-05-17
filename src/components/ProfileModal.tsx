@@ -10,7 +10,7 @@ interface Props {
   me: {
     id:           string
     email:        string | null
-    role:         'admin' | 'driver'
+    role:         string
     display_name: string | null
     avatar_url:   string | null
   }

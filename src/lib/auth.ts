@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 
-export type Role = 'admin' | 'driver'
+export type Role = string
 
 export type CustomTheme = {
   bg:      string

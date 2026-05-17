@@ -15,26 +15,25 @@ import ThemeToggle from './ThemeToggle'
 import ProfileModal from './ProfileModal'
 import { signOut } from '@/app/login/actions'
 
-type Role = 'admin' | 'driver'
-type NavItem  = { href: string; Icon: LucideIcon; label: string; roles?: Role[] }
-type NavGroup = { section: string | null; items: NavItem[]; roles?: Role[] }
+type NavItem  = { href: string; Icon: LucideIcon; label: string }
+type NavGroup = { section: string | null; items: NavItem[] }
 
 const nav: NavGroup[] = [
   { section: null, items: [
     { href: '/dashboard',    Icon: LayoutDashboard, label: '儀表板' },
   ]},
-  { section: '車隊管理', roles: ['admin'], items: [
+  { section: '車隊管理', items: [
     { href: '/trips',        Icon: ScrollText,      label: '車趟紀錄' },
     { href: '/vehicles',     Icon: Truck,           label: '車輛列表' },
     { href: '/people',       Icon: Users,           label: '人員管理' },
     { href: '/schedule',     Icon: CalendarRange,   label: '排班設定' },
   ]},
-  { section: '車輛管理', roles: ['admin'], items: [
+  { section: '車輛管理', items: [
     { href: '/fuel',         Icon: Fuel,            label: '加油紀錄' },
     { href: '/maintenance',  Icon: Wrench,          label: '保養維修' },
     { href: '/inspection',   Icon: ShieldCheck,     label: '驗車紀錄' },
   ]},
-  { section: '財務相關', roles: ['admin'], items: [
+  { section: '財務相關', items: [
     { href: '/reports',      Icon: ChartColumnIncreasing, label: '統計報表' },
     { href: '/finance',      Icon: ReceiptText,     label: '收支報表' },
     { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
@@ -45,13 +44,11 @@ const nav: NavGroup[] = [
     { href: '/leaves',       Icon: PlaneTakeoff,    label: '請假簽核' },
     { href: '/overtimes',    Icon: ClockArrowUp,    label: '加班簽核' },
   ]},
-  { section: null, roles: ['driver'], items: [
-    { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
-  ]},
 ]
 
 interface Props {
-  role:        Role
+  role:        string
+  roleLabel:   string
   email:       string | null
   displayName: string | null
   avatarUrl:   string | null
@@ -59,7 +56,7 @@ interface Props {
   allowedPages: string[]
 }
 
-export default function Sidebar({ role, email, displayName, avatarUrl, userId, allowedPages }: Props) {
+export default function Sidebar({ role, roleLabel, email, displayName, avatarUrl, userId, allowedPages }: Props) {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
 
@@ -67,11 +64,9 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId, a
   const visibleGroups = nav
     .map(g => ({
       ...g,
-      items: g.items.filter(i =>
-        (!i.roles || i.roles.includes(role)) && allowed.has(i.href)
-      ),
+      items: g.items.filter(i => allowed.has(i.href)),
     }))
-    .filter(g => (!g.roles || g.roles.includes(role)) && g.items.length > 0)
+    .filter(g => g.items.length > 0)
 
   const username = displayName || email?.split('@')[0] || '使用者'
   const avatarChar = username.charAt(0).toUpperCase() || 'U'
@@ -154,7 +149,7 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId, a
           </div>
           <div style={{ flex: 1, lineHeight: 1.2, minWidth: 0 }}>
             <div style={{ color: 'var(--text2)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</div>
-            <div style={{ fontSize: 9.5, fontFamily: 'var(--mono)' }}>{role}</div>
+            <div style={{ fontSize: 9.5, fontFamily: 'var(--mono)' }}>{roleLabel}</div>
           </div>
         </button>
         <form action={signOut}>

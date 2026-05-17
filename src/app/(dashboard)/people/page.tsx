@@ -10,16 +10,12 @@ import SortableTh from '@/components/SortableTh'
 import SubNavTabs from '@/components/SubNavTabs'
 import { getCurrentProfile } from '@/lib/auth'
 import { loadRoleDefaults, loadRolePermissions } from '@/lib/rolePermissions.server'
+import { loadRoles, loadRoleMap } from '@/lib/roles.server'
 
 const DRIVER_STATUS: Record<string, { label: string; cls: string }> = {
   active:   { label: '在職', cls: 'badge-green' },
   inactive: { label: '離職', cls: 'badge-red'   },
   leave:    { label: '請假', cls: 'badge-amber'  },
-}
-
-const ROLE_LABEL: Record<string, { label: string; cls: string }> = {
-  admin:  { label: '管理員', cls: 'badge-blue'  },
-  driver: { label: '司機',   cls: 'badge-green' },
 }
 
 type TabKey = 'drivers' | 'users' | 'permissions'
@@ -54,8 +50,8 @@ export default async function PeoplePage({
 }
 
 async function PermissionsTab() {
-  const { pages, sections } = await loadRolePermissions()
-  return <RolePermissionsForm defaults={pages} sections={sections} />
+  const [{ pages, sections }, roles] = await Promise.all([loadRolePermissions(), loadRoles()])
+  return <RolePermissionsForm roles={roles} defaults={pages} sections={sections} />
 }
 
 async function DriversTab({ sortField, ascending }: { sortField: string; ascending: boolean }) {
@@ -188,7 +184,11 @@ async function DriversTab({ sortField, ascending }: { sortField: string; ascendi
 async function UsersTab({ sortField, ascending }: { sortField: string; ascending: boolean }) {
   const me = await getCurrentProfile()
   const supabase = createServiceClient()
-  const roleDefaults = await loadRoleDefaults()
+  const [roleDefaults, roleMap, roles] = await Promise.all([
+    loadRoleDefaults(),
+    loadRoleMap(),
+    loadRoles(),
+  ])
 
   const { data: profiles } = await supabase
     .from('user_profiles')
@@ -218,7 +218,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
     id: string
     email: string
     username: string | null
-    role: 'admin' | 'driver'
+    role: string
     driver_id: string | null
     driver_name: string
     display_name: string | null
@@ -275,7 +275,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
       <PendingDriverAccountList drivers={pendingDrivers} />
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <UserFormModal mode="create" drivers={driverOptions} roleDefaults={roleDefaults} />
+        <UserFormModal mode="create" drivers={driverOptions} roleDefaults={roleDefaults} roles={roles} />
       </div>
       <div className="card">
         <div className="card-head">
@@ -308,13 +308,13 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
             {!sortedRows.length ? (
               <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
             ) : sortedRows.map(r => {
-              const role = ROLE_LABEL[r.role] ?? { label: r.role, cls: 'badge-blue' }
+              const role = roleMap[r.role] ?? { label: r.role, badge_class: 'badge-blue' }
               return (
                 <tr key={r.id}>
                   <td className="mono" style={{ textAlign: 'center' }}>{r.email}</td>
                   <td className="mono" style={{ textAlign: 'center' }}>{r.username ?? ''}</td>
                   <td style={{ textAlign: 'center' }}>{r.display_name ?? ''}</td>
-                  <td style={{ textAlign: 'center' }}><span className={`badge ${role.cls}`}>{role.label}</span></td>
+                  <td style={{ textAlign: 'center' }}><span className={`badge ${role.badge_class}`}>{role.label}</span></td>
                   <td style={{ textAlign: 'center' }}>{r.driver_name}</td>
                   <td style={{ textAlign: 'center' }}>
                     {r.line_user_id
@@ -343,6 +343,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
                       }}
                       drivers={driverOptions}
                       roleDefaults={roleDefaults}
+                      roles={roles}
                       isSelf={me?.id === r.id}
                     />
                   </td>

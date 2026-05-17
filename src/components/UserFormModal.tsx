@@ -4,6 +4,7 @@ import { PencilLine, Plus, Link2, Link2Off } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createUser, updateUser, type UserInput, type Role } from '@/app/(dashboard)/users/actions'
 import { NAV_HREFS, NAV_LABELS, ROLE_DEFAULTS_FALLBACK, type NavHref, type RoleDefaults } from '@/lib/permissions'
+import type { RoleRow } from '@/lib/roles.server'
 
 export type UserRow = {
   id:            string
@@ -26,12 +27,20 @@ interface Props {
   initial?: UserRow
   drivers?: DriverOption[]   // retained for back-compat with callers; not used
   roleDefaults?: RoleDefaults
+  roles?:   RoleRow[]
   trigger?: React.ReactNode
 }
 
-export default function UserFormModal({ mode, initial, roleDefaults, trigger }: Props) {
+const FALLBACK_ROLES: RoleRow[] = [
+  { key: 'admin',  label: '管理員', badge_class: 'badge-blue',  is_builtin: true, sort_order: 0 },
+  { key: 'driver', label: '司機',   badge_class: 'badge-green', is_builtin: true, sort_order: 1 },
+]
+
+export default function UserFormModal({ mode, initial, roleDefaults, roles, trigger }: Props) {
   const router = useRouter()
   const defaults: RoleDefaults = roleDefaults ?? ROLE_DEFAULTS_FALLBACK
+  const roleList: RoleRow[] = roles?.length ? roles : FALLBACK_ROLES
+  const defaultRoleKey = roleList[0]?.key ?? 'admin'
 
   const [open,   setOpen]   = useState(false)
   const [saving, setSaving] = useState(false)
@@ -43,13 +52,17 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
   const [email,       setEmail]       = useState(initial?.email ?? '')
   const [password,    setPassword]    = useState('')
   const [lineId,      setLineId]      = useState(initial?.line_user_id ?? '')
-  const [role,        setRole]        = useState<Role>(initial?.role ?? 'admin')
+  const [role,        setRole]        = useState<Role>(initial?.role ?? defaultRoleKey)
   const [isActive,    setIsActive]    = useState<boolean>(initial?.is_active ?? true)
+
+  function defaultsFor(r: Role): readonly NavHref[] {
+    return (defaults[r] ?? ['/dashboard']) as readonly NavHref[]
+  }
 
   // null = 沿用角色預設（全勾），陣列 = 顯式子集
   const initialAllowed: Set<NavHref> = (() => {
-    const role0 = initial?.role ?? 'admin'
-    const baseSet = new Set<NavHref>(defaults[role0] as readonly NavHref[])
+    const role0 = initial?.role ?? defaultRoleKey
+    const baseSet = new Set<NavHref>(defaultsFor(role0))
     if (!initial?.allowed_pages) return baseSet
     return new Set<NavHref>(initial.allowed_pages.filter(h => baseSet.has(h as NavHref)) as NavHref[])
   })()
@@ -59,14 +72,14 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
     if (mode === 'create') {
       setUsername(''); setDisplayName(''); setRealName(''); setPhone('')
       setEmail(''); setPassword(''); setLineId('')
-      setRole('admin'); setIsActive(true)
-      setAllowed(new Set<NavHref>(defaults.admin as readonly NavHref[]))
+      setRole(defaultRoleKey); setIsActive(true)
+      setAllowed(new Set<NavHref>(defaultsFor(defaultRoleKey)))
     }
   }
 
   function changeRole(next: Role) {
     setRole(next)
-    setAllowed(new Set<NavHref>(defaults[next] as readonly NavHref[]))
+    setAllowed(new Set<NavHref>(defaultsFor(next)))
   }
 
   function togglePage(href: NavHref) {
@@ -85,7 +98,7 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
       alert('用戶名僅允許 3-30 個小寫英數、底線、點'); return
     }
 
-    const currentDefaults = new Set<NavHref>(defaults[role] as readonly NavHref[])
+    const currentDefaults = new Set<NavHref>(defaultsFor(role))
     const allFull = allowed.size === currentDefaults.size &&
       Array.from(currentDefaults).every(h => allowed.has(h))
     const allowedPagesPayload = allFull ? null : Array.from(allowed)
@@ -115,6 +128,8 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
   const G2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }
 
   const lineBound = !!lineId.trim()
+  const roleAllowedHrefs = NAV_HREFS.filter(h => (defaults[role] ?? []).includes(h))
+  const showPageCheckboxes = roleAllowedHrefs.length > 1
 
   const defaultTrigger = mode === 'create'
     ? <button className="btn btn-primary" onClick={() => setOpen(true)} title="新增使用者" style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px' }}><Plus size={16} /></button>
@@ -209,9 +224,10 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
             <div style={G2}>
               <label style={L}>
                 <span style={LT}>身分組別</span>
-                <select className="input" value={role} onChange={e => changeRole(e.target.value as Role)}>
-                  <option value="admin">管理員</option>
-                  <option value="driver">司機</option>
+                <select className="input" value={role} onChange={e => changeRole(e.target.value)}>
+                  {roleList.map(r => (
+                    <option key={r.key} value={r.key}>{r.label}</option>
+                  ))}
                 </select>
               </label>
               <label style={L}>
@@ -223,8 +239,8 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
               </label>
             </div>
 
-            {/* Row 6: 可見頁面設定 — 僅 admin 角色顯示 */}
-            {role === 'admin' && (
+            {/* Row 6: 可見頁面設定 — 角色預設集合大於 /dashboard 才顯示 */}
+            {showPageCheckboxes && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                 <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 4 }}>
                   可見頁面設定
@@ -237,7 +253,7 @@ export default function UserFormModal({ mode, initial, roleDefaults, trigger }: 
                   background: 'var(--bg)', border: '1px solid var(--border)',
                   borderRadius: 8, padding: 10,
                 }}>
-                  {NAV_HREFS.filter(h => (defaults[role] as readonly string[]).includes(h)).map(h => (
+                  {roleAllowedHrefs.map(h => (
                     <label key={h} style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       fontSize: 12, cursor: 'pointer',
