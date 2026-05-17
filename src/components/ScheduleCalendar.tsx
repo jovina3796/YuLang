@@ -218,7 +218,7 @@ export default function ScheduleCalendar({ year, month, drivers, shiftMap }: Pro
         </div>
         <div style={{ display: 'flex', gap: 8, padding: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <select className="input" value={bulkDriver} onChange={e => setBulkDriver(e.target.value)}
-                  style={{ minWidth: 150, height: 32 }}>
+                  style={{ minWidth: 150 }}>
             <option value="">— 選擇司機 —</option>
             {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
@@ -226,7 +226,7 @@ export default function ScheduleCalendar({ year, month, drivers, shiftMap }: Pro
             type="text" className="input" value={bulkInput}
             onChange={e => setBulkInput(e.target.value)}
             placeholder="例：5/15, 5/22, 5/29 或 5/15-5/17"
-            style={{ flex: 1, minWidth: 240, height: 32 }}
+            style={{ flex: 1, minWidth: 240 }}
           />
           <button className="btn btn-primary" onClick={onBulkSubmit}
                   disabled={busy || pending || !bulkDriver || !bulkInput.trim()}>
