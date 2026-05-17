@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/login']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Forward pathname so server layouts can read it for role gating.
   const pathname = request.nextUrl.pathname
   request.headers.set('x-pathname', pathname)

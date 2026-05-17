@@ -33,7 +33,14 @@
       "Bash(cp 'd:/Downloads/馭浪 \\(6\\).png' 'D:/Projects/yulang-oms/public/login-wordmark.png')",
       "Bash(cp 'd:/Downloads/馭浪 \\(7\\).png' 'D:/Projects/yulang-oms/public/icon-forgot-password.png')",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git -C 'D:\\\\Projects\\\\yulang-oms' commit -m \"Initial commit: yulang-oms\" -q)",
+      "Bash(git -C 'D:\\\\Projects\\\\yulang-oms' branch -M main)",
+      "Bash(git -C 'D:\\\\Projects\\\\yulang-oms' remote add origin https://github.com/jovina3796/YuLang.git)",
+      "Bash(git -C 'D:\\\\Projects\\\\yulang-oms' remote -v)",
+      "Bash(git -C 'D:\\\\Projects\\\\yulang-oms' config user.name \"jovina3796\")",
+      "Bash(git -C 'D:\\\\Projects\\\\yulang-oms' config user.email \"jovina3796@users.noreply.github.com\")",
+      "Bash(git *)"
     ]
   }
 }
