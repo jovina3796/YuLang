@@ -1,12 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login']
+const PUBLIC_PATHS = ['/login', '/api/line']
 
 export async function proxy(request: NextRequest) {
   // Forward pathname so server layouts can read it for role gating.
   const pathname = request.nextUrl.pathname
   request.headers.set('x-pathname', pathname)
+
+  // LINE webhook (and any future public API) bypasses auth entirely.
+  if (pathname.startsWith('/api/line/')) {
+    return NextResponse.next({ request })
+  }
 
   let supabaseResponse = NextResponse.next({ request })
 
