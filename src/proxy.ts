@@ -9,7 +9,7 @@ export async function proxy(request: NextRequest) {
   request.headers.set('x-pathname', pathname)
 
   // LINE webhook (and any future public API) bypasses auth entirely.
-  if (pathname.startsWith('/api/line/')) {
+  if (pathname.startsWith('/api/line/') || pathname.startsWith('/liff/')) {
     return NextResponse.next({ request })
   }
 

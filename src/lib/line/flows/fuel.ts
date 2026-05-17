@@ -1,21 +1,21 @@
 import { createServiceClient } from '@/lib/supabase/service'
-import { reply, getMessageContent, textMessage, type QuickReply } from '@/lib/line/api'
+import { reply, getMessageContent, textMessage, flexMessage, type QuickReply } from '@/lib/line/api'
 import { loadSession, resetSession, saveSession, type Session, type SessionPayload } from '@/lib/line/session'
 import { MENU_HINT } from '@/lib/line/flows/bind'
 import { resolvePaymentMethod } from '@/lib/line/aliasMatch'
 import { resolveVehicleForDriver } from '@/lib/line/vehicleResolve'
+import { fuelSuccessBubble, fuelFormTriggerBubble } from '@/lib/line/flex'
 
 const BUCKET = 'fuel-receipts'
-const PAYMENTS_FALLBACK = ['現金', '公司簽帳', '信用卡']
+const PAYMENTS_FALLBACK = ['現金', '公司簽帳', '信用卡','其他']
 const SKIP = '跳過'
 const CANCEL = '取消'
 const DONE = '完成'
 
 const QUICK_HINT =
   '加油快速回報格式：\n' +
-  '加油 [里程] [付款] [金額]\n' +
-  '例：加油 318657 阿哲卡 2285\n' +
-  '或輸入「加油」走逐步引導。'
+  '加油 [里程] [付款] [金額] [日期(選填)]\n' +
+  '或輸入「加油」開啟表單。'
 
 function qrText(labels: string[]): QuickReply {
   return {
@@ -31,6 +31,16 @@ function isNumericToken(s: string): boolean {
 }
 
 export async function startFuel(lineUserId: string, replyToken: string): Promise<void> {
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID
+  if (liffId) {
+    // No session needed — LIFF form submits directly via REST.
+    await resetSession(lineUserId)
+    await reply(replyToken, [
+      flexMessage('加油回報', fuelFormTriggerBubble(`https://liff.line.me/${liffId}`)),
+    ])
+    return
+  }
+  // Fallback: stepwise text flow if LIFF not configured
   await saveSession({ line_user_id: lineUserId, state: 'fuel:date_choice', payload: {} })
   await reply(replyToken, [
     textMessage('日期？', qrText(['今天', '補報日期', CANCEL])),
@@ -38,20 +48,19 @@ export async function startFuel(lineUserId: string, replyToken: string): Promise
 }
 
 // Decides between quick one-shot and stepwise flow based on token count.
-// Quick format: "加油 [里程] [付款] [金額]"  (3 tokens after 加油)
+// Quick format: "加油 [里程] [付款] [金額] [日期(選填)]"  (3 or 4 tokens after 加油)
 export async function handleFuelEntry(driverId: string, lineUserId: string, replyToken: string, text: string): Promise<void> {
   const tokens = text.trim().split(/\s+/).filter(Boolean)
-  // tokens[0] == '加油'
   if (tokens.length === 1) {
     await startFuel(lineUserId, replyToken)
     return
   }
-  if (tokens.length !== 4) {
+  if (tokens.length !== 4 && tokens.length !== 5) {
     await reply(replyToken, [textMessage(`格式錯誤。\n${QUICK_HINT}`)])
     return
   }
 
-  const [, mileageStr, paymentStr, totalStr] = tokens
+  const [, mileageStr, paymentStr, totalStr, dateStr] = tokens
   if (!isNumericToken(mileageStr) || !isNumericToken(totalStr)) {
     await reply(replyToken, [textMessage(`里程與金額需為數字。\n${QUICK_HINT}`)])
     return
@@ -63,7 +72,15 @@ export async function handleFuelEntry(driverId: string, lineUserId: string, repl
     return
   }
 
-  // Resolve payment
+  let loggedAtIso = new Date().toISOString()
+  if (dateStr) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || isNaN(Date.parse(dateStr))) {
+      await reply(replyToken, [textMessage(`日期格式錯誤（需 YYYY-MM-DD）。\n${QUICK_HINT}`)])
+      return
+    }
+    loggedAtIso = new Date(dateStr).toISOString()
+  }
+
   let payment = await resolvePaymentMethod(paymentStr)
   if (!payment && PAYMENTS_FALLBACK.includes(paymentStr.trim())) {
     payment = paymentStr.trim()
@@ -73,16 +90,13 @@ export async function handleFuelEntry(driverId: string, lineUserId: string, repl
     return
   }
 
-  // Resolve vehicle
   const vehicleId = await resolveVehicleForDriver(driverId)
   if (!vehicleId) {
     await reply(replyToken, [textMessage('找不到您今日的派車或預設車輛，請聯絡管理員設定「預設車輛」後再回報。')])
     return
   }
 
-  // Insert
   const supabase = createServiceClient()
-  const nowIso = new Date().toISOString()
   const { error } = await supabase.from('fuel_logs').insert({
     vehicle_id:        vehicleId,
     driver_id:         driverId,
@@ -93,7 +107,7 @@ export async function handleFuelEntry(driverId: string, lineUserId: string, repl
     station_name:      null,
     payment_method:    payment,
     notes:             null,
-    logged_at:         nowIso,
+    logged_at:         loggedAtIso,
     receipt_url:       null,
   })
   if (error) {
@@ -112,15 +126,15 @@ export async function handleFuelEntry(driverId: string, lineUserId: string, repl
   }
 
   await resetSession(lineUserId)
-  await reply(replyToken, [textMessage(
-    `加油已記錄 ✓\n` +
-    `日期：${nowIso.slice(0, 10)}\n` +
-    `車輛：${v?.plate_number ?? ''}\n` +
-    `里程：${mileage} km\n` +
-    `金額：NT$ ${total}\n` +
-    `付款：${payment}\n\n` +
-    QUICK_HINT
-  )])
+  await reply(replyToken, [
+    flexMessage('加油資料已記錄', fuelSuccessBubble({
+      date:    loggedAtIso.slice(0, 10),
+      plate:   v?.plate_number ?? '',
+      mileage,
+      total,
+      payment,
+    }, { detailed: true })),
+  ])
 }
 
 export async function handleFuel(
@@ -351,21 +365,14 @@ async function finalize(lineUserId: string, replyToken: string, payload: Session
     }
   }
 
-  const { data: v } = await supabase
-    .from('vehicles')
-    .select('plate_number')
-    .eq('id', payload.vehicle_id)
-    .single()
-  const date = payload.logged_at.slice(0, 10)
-  const summary =
-    `加油已記錄 ✓\n` +
-    `日期：${date}\n` +
-    `車輛：${v?.plate_number ?? ''}\n` +
-    `金額：NT$ ${payload.total_cost}\n` +
-    (payload.mileage_at_refuel != null ? `里程：${payload.mileage_at_refuel} km\n` : '') +
-    (payload.payment_method ? `付款：${payload.payment_method}\n` : '') +
-    (payload.receipt_url ? '收據：已上傳\n' : '')
-
   await resetSession(lineUserId)
-  await reply(replyToken, [textMessage(`${summary}\n${MENU_HINT}`)])
+  await reply(replyToken, [
+    flexMessage('加油資料已記錄', fuelSuccessBubble({
+      date:    payload.logged_at.slice(0, 10),
+      plate:   '',
+      mileage: payload.mileage_at_refuel ?? null,
+      total:   payload.total_cost,
+      payment: payload.payment_method ?? null,
+    })),
+  ])
 }

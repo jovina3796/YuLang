@@ -10,6 +10,25 @@ function token(): string {
 
 export type LineMessage =
   | { type: 'text'; text: string; quickReply?: QuickReply }
+  | { type: 'flex'; altText: string; contents: FlexBubble; quickReply?: QuickReply }
+
+export type FlexBubble = {
+  type: 'bubble'
+  size?: 'nano' | 'micro' | 'kilo' | 'mega' | 'giga'
+  header?: FlexBox
+  body?:   FlexBox
+  footer?: FlexBox
+  styles?: Record<string, unknown>
+}
+
+export type FlexComponent =
+  | { type: 'text'; text: string; size?: string; weight?: 'bold' | 'regular'; color?: string; align?: 'start' | 'center' | 'end'; flex?: number; wrap?: boolean; margin?: string }
+  | { type: 'separator'; margin?: string; color?: string }
+  | { type: 'spacer'; size?: string }
+  | { type: 'box'; layout: 'horizontal' | 'vertical' | 'baseline'; contents: FlexComponent[]; spacing?: string; margin?: string; backgroundColor?: string; paddingAll?: string }
+  | { type: 'button'; style: 'primary' | 'secondary' | 'link'; color?: string; height?: 'sm' | 'md'; action: { type: 'uri'; label: string; uri: string } | { type: 'message'; label: string; text: string } }
+
+export type FlexBox = Extract<FlexComponent, { type: 'box' }>
 
 export type QuickReply = {
   items: Array<{
@@ -66,4 +85,8 @@ export async function getMessageContent(messageId: string): Promise<{ buffer: Ar
 
 export function textMessage(text: string, quickReply?: QuickReply): LineMessage {
   return quickReply ? { type: 'text', text, quickReply } : { type: 'text', text }
+}
+
+export function flexMessage(altText: string, contents: FlexBubble, quickReply?: QuickReply): LineMessage {
+  return quickReply ? { type: 'flex', altText, contents, quickReply } : { type: 'flex', altText, contents }
 }
