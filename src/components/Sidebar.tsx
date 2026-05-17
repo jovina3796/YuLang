@@ -85,14 +85,14 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId }:
       position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 10,
     }}>
       {/* Brand */}
-      <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '5px 5px 5px', borderBottom: '1px solid var(--border)' }}>
         <Image
           src="/yl.png"
           alt="馭浪物流 Yulang Logistics Ltd."
           width={168}
           height={80}
           priority
-          style={{ width: '100%', height: 'auto', display: 'block' }}
+          style={{ width: '70%', height: 'auto', display: 'block' }}
         />
         <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 4, textAlign: 'right' }}>ERP v1.0</div>
       </div>
