@@ -19,6 +19,8 @@ export type Profile = {
   role:          Role
   driver_id:     string | null
   display_name:  string | null
+  real_name:     string | null
+  phone:         string | null
   avatar_url:    string | null
   theme:         CustomTheme | null
   line_user_id:  string | null
@@ -33,7 +35,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   const service = createServiceClient()
   const { data: profile } = await service
     .from('user_profiles')
-    .select('id, role, driver_id, display_name, avatar_url, is_active, theme, line_user_id, allowed_pages')
+    .select('id, role, driver_id, display_name, real_name, phone, avatar_url, is_active, theme, line_user_id, allowed_pages')
     .eq('id', user.id)
     .single()
 
@@ -45,6 +47,8 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     role:          profile.role as Role,
     driver_id:     profile.driver_id,
     display_name:  profile.display_name,
+    real_name:     profile.real_name ?? null,
+    phone:         profile.phone ?? null,
     avatar_url:    profile.avatar_url ?? null,
     theme:         (profile.theme ?? null) as CustomTheme | null,
     line_user_id:  profile.line_user_id ?? null,

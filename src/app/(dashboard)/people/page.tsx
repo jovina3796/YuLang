@@ -174,7 +174,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
 
   const { data: profiles } = await supabase
     .from('user_profiles')
-    .select('id, username, role, driver_id, display_name, is_active, created_at, line_user_id, allowed_pages')
+    .select('id, username, role, driver_id, display_name, real_name, phone, is_active, created_at, line_user_id, allowed_pages')
 
   const { data: drivers } = await supabase
     .from('drivers')
@@ -204,6 +204,8 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
     driver_id: string | null
     driver_name: string
     display_name: string | null
+    real_name: string | null
+    phone: string | null
     is_active: boolean
     line_user_id: string | null
     allowed_pages: string[] | null
@@ -219,6 +221,8 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
       driver_id: p.driver_id,
       driver_name: drv?.name ?? '',
       display_name: p.display_name,
+      real_name: p.real_name ?? null,
+      phone: p.phone ?? null,
       is_active: p.is_active,
       // 以 user_profiles 為準，若沒有但司機表有，仍顯示為已綁
       line_user_id: p.line_user_id ?? drv?.line_user_id ?? null,
@@ -313,6 +317,8 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
                         role: r.role,
                         driver_id: r.driver_id,
                         display_name: r.display_name,
+                        real_name: r.real_name,
+                        phone: r.phone,
                         is_active: r.is_active,
                         line_user_id: r.line_user_id,
                         allowed_pages: r.allowed_pages,

@@ -12,8 +12,10 @@ export type UserInput = {
   password?:     string         // required on create only
   username:      string | null
   role:          Role
-  driver_id:     string | null
   display_name:  string | null
+  real_name:     string | null
+  phone:         string | null
+  line_user_id:  string | null
   is_active:     boolean
   allowed_pages: string[] | null
 }
@@ -37,6 +39,22 @@ async function ensureAdmin() {
   return { error: null as string | null, me }
 }
 
+/**
+ * If a LINE userId is supplied, find the driver bound to it (if any) so we
+ * can mirror driver_id onto the user_profiles row. Returns null when the
+ * LINE userId is empty or no driver matches.
+ */
+async function resolveDriverIdFromLine(
+  supabase: ReturnType<typeof createServiceClient>,
+  lineUserId: string | null,
+): Promise<string | null> {
+  if (!lineUserId) return null
+  const { data } = await supabase
+    .from('drivers')
+    .select('id').eq('line_user_id', lineUserId).maybeSingle()
+  return data?.id ?? null
+}
+
 export async function createUser(input: UserInput) {
   const guard = await ensureAdmin()
   if (guard.error) return { error: guard.error }
@@ -56,6 +74,9 @@ export async function createUser(input: UserInput) {
     if (dup) return { error: '用戶名已被使用' }
   }
 
+  const lineUserId = input.line_user_id?.trim() || null
+  const driverId   = await resolveDriverIdFromLine(supabase, lineUserId)
+
   const { data: created, error: e1 } = await supabase.auth.admin.createUser({
     email: input.email.trim(),
     password: input.password,
@@ -67,8 +88,11 @@ export async function createUser(input: UserInput) {
     id:            created.user.id,
     role:          input.role,
     username,
-    driver_id:     input.role === 'driver' ? input.driver_id : null,
+    driver_id:     driverId,
     display_name:  input.display_name?.trim() || null,
+    real_name:     input.real_name?.trim()    || null,
+    phone:         input.phone?.trim()        || null,
+    line_user_id:  lineUserId,
     is_active:     input.is_active,
     allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages),
   })
@@ -78,7 +102,7 @@ export async function createUser(input: UserInput) {
     return { error: e2.message }
   }
 
-  revalidatePath('/users')
+  revalidatePath('/people')
   return { error: null }
 }
 
@@ -100,6 +124,11 @@ export async function updateUser(id: string, input: Omit<UserInput, 'password'>)
     if (dup) return { error: '用戶名已被使用' }
   }
 
+  const lineUserId = input.line_user_id?.trim() || null
+  // Re-resolve driver_id from the (possibly changed) LINE userId. Setting LINE
+  // to empty also clears driver_id — admin clears association by clearing LINE.
+  const driverId = await resolveDriverIdFromLine(supabase, lineUserId)
+
   const { error: e1 } = await supabase.auth.admin.updateUserById(id, {
     email: input.email.trim(),
   })
@@ -108,14 +137,17 @@ export async function updateUser(id: string, input: Omit<UserInput, 'password'>)
   const { error: e2 } = await supabase.from('user_profiles').update({
     role:          input.role,
     username,
-    driver_id:     input.role === 'driver' ? input.driver_id : null,
+    driver_id:     driverId,
     display_name:  input.display_name?.trim() || null,
+    real_name:     input.real_name?.trim()    || null,
+    phone:         input.phone?.trim()        || null,
+    line_user_id:  lineUserId,
     is_active:     input.is_active,
     allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages),
   }).eq('id', id)
   if (e2) return { error: e2.message }
 
-  revalidatePath('/users')
+  revalidatePath('/people')
   return { error: null }
 }
 
@@ -196,6 +228,8 @@ export async function createUserForDriver(
     username:      cred.username,
     driver_id:     driverId,
     display_name:  driver.name,
+    real_name:     driver.name,
+    phone:         driver.phone ?? null,
     is_active:     true,
     allowed_pages: null,
   })
