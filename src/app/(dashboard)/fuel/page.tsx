@@ -18,8 +18,15 @@ export default async function FuelPage({
   const sortField = sort ?? 'logged_at'
   const ascending = (dir ?? 'desc') === 'asc'
 
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  // Use TW timezone to determine current month so server (UTC) doesn't roll
+  // over a day early/late at month boundaries.
+  const twNowParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date())
+  const twYear  = Number(twNowParts.find(p => p.type === 'year')!.value)
+  const twMonth = Number(twNowParts.find(p => p.type === 'month')!.value)
+  const monthStart    = new Date(`${twYear}-${String(twMonth).padStart(2, '0')}-01T00:00:00+08:00`).toISOString()
+  const nextMonthStart = new Date(`${twMonth === 12 ? twYear + 1 : twYear}-${String(twMonth === 12 ? 1 : twMonth + 1).padStart(2, '0')}-01T00:00:00+08:00`).toISOString()
 
   let q = supabase
     .from('fuel_logs')
@@ -30,14 +37,18 @@ export default async function FuelPage({
   if (to)      q = q.lte('logged_at', new Date(`${to}T23:59:59.999+08:00`).toISOString())
   if (vehicle) q = q.eq('vehicle_id', vehicle)
 
-  const [{ data: logs }, { data: vehicles }, { data: aliases }] = await Promise.all([
+  const [{ data: logs }, { data: vehicles }, { data: aliases }, { data: monthlyLogs }] = await Promise.all([
     q,
     supabase.from('vehicles').select('id, plate_number').order('display_order', { ascending: true, nullsFirst: false }).order('plate_number'),
     supabase.from('payment_aliases').select('id, alias, target, created_at').order('created_at', { ascending: false }),
+    supabase.from('fuel_logs')
+      .select('total_cost')
+      .gte('logged_at', monthStart)
+      .lt('logged_at', nextMonthStart),
   ])
 
-  const monthly = logs?.filter(l => l.logged_at >= monthStart) ?? []
-  const totalCost = monthly.reduce((s, l) => s + (l.total_cost ?? 0), 0)
+  const monthly = monthlyLogs ?? []
+  const totalCost = monthly.reduce((s, l: any) => s + (l.total_cost ?? 0), 0)
 
   const getKey = (l: any): string | number => {
     switch (sortField) {
