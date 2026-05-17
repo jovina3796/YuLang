@@ -81,7 +81,7 @@ export default function FuelFormModal({ vehicles, mode, initial, trigger }: Prop
       station_name:      initial?.station_name ?? null,
       payment_method:    payMethod.trim() || null,
       notes:             notes.trim() || null,
-      logged_at:         new Date(date).toISOString(),
+      logged_at:         new Date(`${date}T00:00:00+08:00`).toISOString(),
       receipt_url:       nextUrl,
     }
     const { error } = mode === 'create'

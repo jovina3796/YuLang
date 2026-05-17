@@ -175,7 +175,7 @@ export async function handleFuel(
         await reply(replyToken, [textMessage('日期格式錯誤，請用 YYYY-MM-DD 重新輸入。', qrText([CANCEL]))])
         return
       }
-      payload.logged_at = new Date(d).toISOString()
+      payload.logged_at = new Date(`${d}T00:00:00+08:00`).toISOString()
       await askVehicle(lineUserId, replyToken, payload)
       return
     }

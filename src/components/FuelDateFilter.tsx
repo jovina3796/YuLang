@@ -31,19 +31,23 @@ export default function FuelDateFilter({ vehicles }: { vehicles: Vehicle[] }) {
     router.push(qs ? `${pathname}?${qs}` : pathname)
   }
 
+  function localDateStr(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
   function quickRange(days: number) {
     const end   = new Date()
     const start = new Date()
     start.setDate(end.getDate() - (days - 1))
-    const f = start.toISOString().split('T')[0]
-    const t = end.toISOString().split('T')[0]
+    const f = localDateStr(start)
+    const t = localDateStr(end)
     setFrom(f); setTo(t); apply({ from: f, to: t })
   }
 
   function thisMonth() {
     const now = new Date()
-    const f = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const t = now.toISOString().split('T')[0]
+    const f = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1))
+    const t = localDateStr(now)
     setFrom(f); setTo(t); apply({ from: f, to: t })
   }
 

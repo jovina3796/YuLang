@@ -26,8 +26,8 @@ export default async function FuelPage({
     .select('*, vehicles(plate_number)')
     .order('logged_at', { ascending: false })
     .limit(500)
-  if (from)    q = q.gte('logged_at', from)
-  if (to)      q = q.lte('logged_at', `${to}T23:59:59.999`)
+  if (from)    q = q.gte('logged_at', new Date(`${from}T00:00:00+08:00`).toISOString())
+  if (to)      q = q.lte('logged_at', new Date(`${to}T23:59:59.999+08:00`).toISOString())
   if (vehicle) q = q.eq('vehicle_id', vehicle)
 
   const [{ data: logs }, { data: vehicles }, { data: aliases }] = await Promise.all([
@@ -58,6 +58,7 @@ export default async function FuelPage({
   })
 
   const hasFilter = !!(from || to || vehicle)
+  const filteredSubtotal = sortedLogs.reduce((s, l: any) => s + (l.total_cost ?? 0), 0)
 
   return (
     <div>
@@ -103,6 +104,11 @@ export default async function FuelPage({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <FuelDateFilter vehicles={vehicles ?? []} />
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {hasFilter && (
+            <span style={{ fontSize: 13, color: 'var(--text2)', marginRight: 4 }}>
+              金額小計：<span className="mono" style={{ color: 'var(--amber2)', fontWeight: 600 }}>${filteredSubtotal.toLocaleString()}</span>
+            </span>
+          )}
           <FuelImportExport />
           <FuelFormModal vehicles={vehicles ?? []} mode="create" />
         </div>
@@ -141,7 +147,7 @@ export default async function FuelPage({
               <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
             ) : sortedLogs.map((l: any) => (
               <tr key={l.id}>
-                <td className="mono" style={{ textAlign: 'center' }}>{new Date(l.logged_at).toLocaleDateString('zh-TW', { year: 'numeric', month:'2-digit', day:'2-digit' })}</td>
+                <td className="mono" style={{ textAlign: 'center' }}>{new Date(l.logged_at).toLocaleDateString('zh-TW', { year: 'numeric', month:'2-digit', day:'2-digit', timeZone: 'Asia/Taipei' })}</td>
                 <td className="mono" style={{ textAlign: 'center' }}>{l.vehicles?.plate_number ?? ''}</td>
                 <td className="mono" style={{ textAlign: 'right' }}>{l.mileage_at_refuel?.toLocaleString() ?? ''}</td>
                 <td className="mono" style={{ color: 'var(--amber2)', textAlign: 'right' }}>{l.total_cost?.toLocaleString() ?? ''}</td>
