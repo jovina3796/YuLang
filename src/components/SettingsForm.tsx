@@ -16,10 +16,10 @@ const ACCENTS: { key: AccentKey; label: string; swatch: string }[] = [
 ]
 
 const FONTS: { key: FontKey; label: string; sample: string; family: string }[] = [
-  { key: 'noto',   label: '思源黑體', sample: '馭浪物流 OMS Yulang 0123', family: "'Noto Sans TC', sans-serif" },
-  { key: 'system', label: '系統預設', sample: '馭浪物流 OMS Yulang 0123', family: "-apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', sans-serif" },
-  { key: 'lxgw',   label: '霞鶩文楷', sample: '馭浪物流 OMS Yulang 0123', family: "'LXGW WenKai TC', 'Noto Sans TC', sans-serif" },
-  { key: 'serif',  label: '思源宋體', sample: '馭浪物流 OMS Yulang 0123', family: "'Noto Serif TC', 'Songti TC', serif" },
+  { key: 'noto',   label: '思源黑體', sample: '馭浪物流 ERP Yulang 0123', family: "'Noto Sans TC', sans-serif" },
+  { key: 'system', label: '系統預設', sample: '馭浪物流 ERP Yulang 0123', family: "-apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', sans-serif" },
+  { key: 'lxgw',   label: '霞鶩文楷', sample: '馭浪物流 ERP Yulang 0123', family: "'LXGW WenKai TC', 'Noto Sans TC', sans-serif" },
+  { key: 'serif',  label: '思源宋體', sample: '馭浪物流 ERP Yulang 0123', family: "'Noto Serif TC', 'Songti TC', serif" },
 ]
 
 const MONOS: { key: MonoKey; label: string; family: string }[] = [

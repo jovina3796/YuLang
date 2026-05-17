@@ -98,7 +98,7 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId }:
           </div>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '.5px' }}>馭浪物流</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>OMS v1.0</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>ERP v1.0</div>
           </div>
         </div>
       </div>
