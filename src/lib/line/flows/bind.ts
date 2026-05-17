@@ -2,7 +2,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { reply, textMessage } from '@/lib/line/api'
 import { resetSession, saveSession } from '@/lib/line/session'
 
-export const MENU_HINT = '輸入「加油」開始回報加油紀錄。'
+export const MENU_HINT = '加油回報：\n• 快速：加油 [里程] [付款] [金額]（例：加油 318657 阿哲卡 2285）\n• 逐步引導：輸入「加油」'
 
 export async function findDriverByLineUserId(lineUserId: string): Promise<{ id: string; name: string } | null> {
   const supabase = createServiceClient()

@@ -28,6 +28,13 @@ export default async function DriversPage({
     .order('display_order', { ascending: true, nullsFirst: false })
     .order('name')
 
+  const { data: vehiclesRaw } = await supabase
+    .from('vehicles')
+    .select('id, plate_number')
+    .eq('status', 'active')
+    .order('plate_number')
+  const vehicles = (vehiclesRaw ?? []) as { id: string; plate_number: string }[]
+
   const { data: tripStats } = await supabase
     .from('trips')
     .select('driver_id')
@@ -62,7 +69,7 @@ export default async function DriversPage({
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <DriverFormModal mode="create" />
+        <DriverFormModal vehicles={vehicles} mode="create" />
       </div>
       <div className="card">
         <div className="card-head">
@@ -100,7 +107,7 @@ export default async function DriversPage({
                   </td>
                   <td style={{ textAlign: 'center' }}><span className={`badge ${st.cls}`}>{st.label}</span></td>
                   <td style={{ textAlign: 'right' }}>
-                    <DriverRowActions driver={{
+                    <DriverRowActions vehicles={vehicles} driver={{
                       id: d.id,
                       employee_no: d.employee_no ?? null,
                       name: d.name,
@@ -119,6 +126,7 @@ export default async function DriversPage({
                       line_user_id: d.line_user_id ?? null,
                       bank_name: d.bank_name ?? null,
                       bank_account: d.bank_account ?? null,
+                      default_vehicle_id: d.default_vehicle_id ?? null,
                       status: d.status,
                       display_order: d.display_order ?? null,
                     }} />

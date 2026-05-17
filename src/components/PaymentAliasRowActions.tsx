@@ -2,22 +2,21 @@
 import { useState } from 'react'
 import { PencilLine, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { deleteDriver } from '@/app/(dashboard)/drivers/actions'
-import DriverFormModal, { type DriverRow } from './DriverFormModal'
+import { deletePaymentAlias } from '@/app/(dashboard)/payment-aliases/actions'
+import PaymentAliasFormModal, { type PaymentAliasRow } from './PaymentAliasFormModal'
 
 interface Props {
-  driver: DriverRow
-  vehicles: { id: string; plate_number: string }[]
+  row: PaymentAliasRow
 }
 
-export default function DriverRowActions({ driver, vehicles }: Props) {
+export default function PaymentAliasRowActions({ row }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
   async function handleDelete() {
-    if (!confirm(`確定刪除司機「${driver.name}」？\n注意：若有相關車趟或排班紀錄，刪除可能會失敗。`)) return
+    if (!confirm(`確定刪除別名「${row.alias}」？`)) return
     setBusy(true)
-    const { error } = await deleteDriver(driver.id)
+    const { error } = await deletePaymentAlias(row.id)
     setBusy(false)
     if (error) { alert(`刪除失敗：${error}`); return }
     router.refresh()
@@ -25,10 +24,9 @@ export default function DriverRowActions({ driver, vehicles }: Props) {
 
   return (
     <div style={{ display: 'flex', gap: 6 }}>
-      <DriverFormModal
-        vehicles={vehicles}
+      <PaymentAliasFormModal
         mode="edit"
-        initial={driver}
+        initial={row}
         trigger={<button className="icon-btn" disabled={busy} title="編輯"><PencilLine size={14} /></button>}
       />
       <button className="icon-btn danger" onClick={handleDelete} disabled={busy} title="刪除">

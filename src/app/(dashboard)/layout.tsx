@@ -8,7 +8,7 @@ const ADMIN_ONLY_PREFIXES = [
   '/trips', '/vehicles', '/drivers', '/schedule',
   '/fuel', '/maintenance', '/inspection',
   '/reports', '/fixed', '/misc', '/vendors', '/rates',
-  '/settings', '/users',
+  '/settings', '/users', '/payment-aliases',
 ]
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

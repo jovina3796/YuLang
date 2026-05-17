@@ -23,17 +23,19 @@ export type DriverRow = {
   line_user_id:         string | null
   bank_name:            string | null
   bank_account:         string | null
+  default_vehicle_id:   string | null
   status:               string
   display_order:        number | null
 }
 
 interface Props {
+  vehicles: { id: string; plate_number: string }[]
   mode:     'create' | 'edit'
   initial?: DriverRow
   trigger?: React.ReactNode
 }
 
-export default function DriverFormModal({ mode, initial, trigger }: Props) {
+export default function DriverFormModal({ vehicles, mode, initial, trigger }: Props) {
   const router = useRouter()
 
   const [open,   setOpen]   = useState(false)
@@ -56,6 +58,7 @@ export default function DriverFormModal({ mode, initial, trigger }: Props) {
   const [lineId,     setLineId]     = useState(initial?.line_user_id ?? '')
   const [bankName,   setBankName]   = useState(initial?.bank_name ?? '')
   const [bankAccount,setBankAccount]= useState(initial?.bank_account ?? '')
+  const [defaultVehicleId, setDefaultVehicleId] = useState(initial?.default_vehicle_id ?? '')
   const [status,     setStatus]     = useState(initial?.status ?? 'active')
   const [displayOrder, setDisplayOrder] = useState<number | ''>(initial?.display_order ?? '')
 
@@ -66,6 +69,7 @@ export default function DriverFormModal({ mode, initial, trigger }: Props) {
       setLicenseType(''); setLicenseRenewal(''); setHireDate(''); setLeaveDate('')
       setLaborIns(''); setHealthIns(''); setLineId('')
       setBankName(''); setBankAccount('')
+      setDefaultVehicleId('')
       setStatus('active'); setDisplayOrder('')
     }
   }
@@ -90,6 +94,7 @@ export default function DriverFormModal({ mode, initial, trigger }: Props) {
       line_user_id:         lineId.trim() || null,
       bank_name:            bankName.trim() || null,
       bank_account:         bankAccount.trim() || null,
+      default_vehicle_id:   defaultVehicleId || null,
       status,
       display_order: displayOrder === '' ? null : Number(displayOrder),
     }
@@ -234,6 +239,14 @@ export default function DriverFormModal({ mode, initial, trigger }: Props) {
                 </select>
               </label>
             </div>
+
+            <label style={L}>
+              <span style={LT}>預設車輛（LINE 加油快速回報用，當天無排班車輛時使用）</span>
+              <select className="input" value={defaultVehicleId} onChange={e => setDefaultVehicleId(e.target.value)}>
+                <option value="">— 未設定 —</option>
+                {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate_number}</option>)}
+              </select>
+            </label>
 
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 2 }}>
               <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 10, textAlign: 'left' }}>薪資轉帳資訊</div>

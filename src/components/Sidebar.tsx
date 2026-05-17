@@ -8,7 +8,7 @@ import {
   Fuel, Wrench, ShieldCheck,
   ChartColumnIncreasing, ReceiptText, Wallet, FileSpreadsheet, Building2, Tags,
   HandCoins, PlaneTakeoff, ClockArrowUp,
-  Settings, LogOut, UserCog,
+  Settings, LogOut, UserCog, CreditCard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
@@ -51,7 +51,8 @@ const nav: NavGroup[] = [
     { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
   ]},
   { section: '系統管理', roles: ['admin'], items: [
-    { href: '/users',        Icon: UserCog,         label: '使用者管理' },
+    { href: '/payment-aliases', Icon: CreditCard, label: '付款別名' },
+    { href: '/users',        Icon: UserCog,       label: '使用者管理' },
   ]},
 ]
 

@@ -20,6 +20,7 @@ export type DriverInput = {
   line_user_id:         string | null
   bank_name:            string | null
   bank_account:         string | null
+  default_vehicle_id:   string | null
   status:               string
   display_order:        number | null
 }
