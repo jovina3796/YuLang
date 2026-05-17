@@ -5,7 +5,7 @@ import Topbar from '@/components/Topbar'
 import { getCurrentProfile } from '@/lib/auth'
 
 const ADMIN_ONLY_PREFIXES = [
-  '/trips', '/vehicles', '/drivers', '/schedule',
+  '/trips', '/vehicles', '/drivers', '/people', '/schedule',
   '/fuel', '/maintenance', '/inspection',
   '/reports', '/fixed', '/misc', '/vendors', '/rates',
   '/settings', '/users', '/payment-aliases',

@@ -44,7 +44,9 @@
       "Bash(sed -n '85,115p' src/components/Sidebar.tsx)",
       "Bash(sed -n '50,60p' src/components/Sidebar.tsx)",
       "Bash(sed -n '60,80p' 'src/app/\\(dashboard\\)/fuel/page.tsx')",
-      "Bash(sed -n '155,200p' 'src/app/\\(dashboard\\)/fuel/page.tsx')"
+      "Bash(sed -n '155,200p' 'src/app/\\(dashboard\\)/fuel/page.tsx')",
+      "Bash(sed -i \"s|{ href: '/drivers',      Icon: Users,           label: '人員列表' },|{ href: '/people',       Icon: Users,           label: '人員管理' },|\" src/components/Sidebar.tsx)",
+      "Bash(sed -i \"/{ section: '系統管理', roles: \\\\['admin'\\\\], items: \\\\[/,/^  \\\\]},/d\" src/components/Sidebar.tsx)"
     ]
   }
 }

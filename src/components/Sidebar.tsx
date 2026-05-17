@@ -8,7 +8,7 @@ import {
   Fuel, Wrench, ShieldCheck,
   ChartColumnIncreasing, ReceiptText, Wallet, FileSpreadsheet, Building2, Tags,
   HandCoins, PlaneTakeoff, ClockArrowUp,
-  Settings, LogOut, UserCog,
+  Settings, LogOut,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
@@ -26,7 +26,7 @@ const nav: NavGroup[] = [
   { section: '車隊管理', roles: ['admin'], items: [
     { href: '/trips',        Icon: ScrollText,      label: '車趟紀錄' },
     { href: '/vehicles',     Icon: Truck,           label: '車輛列表' },
-    { href: '/drivers',      Icon: Users,           label: '人員列表' },
+    { href: '/people',       Icon: Users,           label: '人員管理' },
     { href: '/schedule',     Icon: CalendarRange,   label: '排班設定' },
   ]},
   { section: '車輛管理', roles: ['admin'], items: [
@@ -49,9 +49,6 @@ const nav: NavGroup[] = [
   ]},
   { section: null, roles: ['driver'], items: [
     { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
-  ]},
-  { section: '系統管理', roles: ['admin'], items: [
-    { href: '/users',        Icon: UserCog,       label: '使用者管理' },
   ]},
 ]
 
@@ -85,16 +82,13 @@ export default function Sidebar({ role, email, displayName, avatarUrl, userId }:
       position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 10,
     }}>
       {/* Brand */}
-      <div style={{ padding: '5px 5px 5px', borderBottom: '1px solid var(--border)' }}>
-        <Image
-          src="/yl.png"
-          alt="馭浪物流 Yulang Logistics Ltd."
-          width={168}
-          height={80}
-          priority
-          style={{ width: '70%', height: 'auto', display: 'block' }}
+      <div style={{padding: '5px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-end', gap: '10px'}}>
+        <Image src="/yl.png" alt="馭浪物流 Yulang Logistics Ltd." width={168} height={80} 
+               style={{ width: '150px', height: 'auto' }}
         />
-        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 4, textAlign: 'right' }}>ERP v1.0</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)'}}>
+          ERP v1.0
+        </div>
       </div>
 
       {/* Nav */}
