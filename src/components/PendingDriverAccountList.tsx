@@ -2,7 +2,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { UserPlus, AlertCircle } from 'lucide-react'
-import { createUserForDriver, deriveDriverCredentials } from '@/app/(dashboard)/users/actions'
+import { createUserForDriver } from '@/app/(dashboard)/users/actions'
+import { deriveDriverCredentials } from '@/lib/driverCredentials'
 
 export type PendingDriver = {
   id:          string

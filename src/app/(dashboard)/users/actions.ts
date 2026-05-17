@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getCurrentProfile } from '@/lib/auth'
 import { sanitizeAllowedPages } from '@/lib/permissions'
+import { deriveDriverCredentials } from '@/lib/driverCredentials'
 
 export type Role = 'admin' | 'driver'
 
@@ -140,26 +141,6 @@ export async function deleteUser(id: string) {
   if (error) return { error: error.message }
   revalidatePath('/users')
   return { error: null }
-}
-
-/**
- * Build the canonical login credentials from a driver's phone:
- *   email    = {digits}@yulang.local
- *   username = {digits}
- *   password = last 6 digits, left-padded to 6 if shorter
- * Returns null if phone is missing or has no digits.
- */
-export function deriveDriverCredentials(phone: string | null): {
-  email: string; username: string; password: string
-} | null {
-  const digits = (phone ?? '').replace(/\D/g, '')
-  if (!digits) return null
-  const password = digits.length >= 6 ? digits.slice(-6) : digits.padStart(6, '0')
-  return {
-    email:    `${digits}@yulang.local`,
-    username: digits,
-    password,
-  }
 }
 
 /**
