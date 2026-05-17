@@ -2,7 +2,8 @@
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getCurrentProfile } from '@/lib/auth'
-import { sanitizeAllowedPages } from '@/lib/permissions'
+import { NAV_HREFS, sanitizeAllowedPages } from '@/lib/permissions'
+import { loadRoleDefaults } from '@/lib/rolePermissions.server'
 import { deriveDriverCredentials } from '@/lib/driverCredentials'
 
 export type Role = 'admin' | 'driver'
@@ -76,6 +77,7 @@ export async function createUser(input: UserInput) {
 
   const lineUserId = input.line_user_id?.trim() || null
   const driverId   = await resolveDriverIdFromLine(supabase, lineUserId)
+  const defaults   = await loadRoleDefaults()
 
   const { data: created, error: e1 } = await supabase.auth.admin.createUser({
     email: input.email.trim(),
@@ -94,7 +96,7 @@ export async function createUser(input: UserInput) {
     phone:         input.phone?.trim()        || null,
     line_user_id:  lineUserId,
     is_active:     input.is_active,
-    allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages),
+    allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages, defaults),
   })
   if (e2) {
     // Roll back the auth user so we don't leave orphans.
@@ -128,6 +130,7 @@ export async function updateUser(id: string, input: Omit<UserInput, 'password'>)
   // Re-resolve driver_id from the (possibly changed) LINE userId. Setting LINE
   // to empty also clears driver_id — admin clears association by clearing LINE.
   const driverId = await resolveDriverIdFromLine(supabase, lineUserId)
+  const defaults = await loadRoleDefaults()
 
   const { error: e1 } = await supabase.auth.admin.updateUserById(id, {
     email: input.email.trim(),
@@ -143,7 +146,7 @@ export async function updateUser(id: string, input: Omit<UserInput, 'password'>)
     phone:         input.phone?.trim()        || null,
     line_user_id:  lineUserId,
     is_active:     input.is_active,
-    allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages),
+    allowed_pages: sanitizeAllowedPages(input.role, input.allowed_pages, defaults),
   }).eq('id', id)
   if (e2) return { error: e2.message }
 
@@ -255,5 +258,30 @@ export async function unbindLine(driverId: string) {
   if (e1 || e2) return { error: (e1 ?? e2)!.message }
 
   revalidatePath('/people')
+  return { error: null }
+}
+
+/**
+ * Save the default allow-set for a role (upper bound for per-user
+ * allowed_pages). Validates each entry against NAV_HREFS to prevent injection.
+ */
+export async function saveRoleDefaults(role: Role, allowedPages: string[]) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error }
+  if (role !== 'admin' && role !== 'driver') return { error: '無效的角色' }
+
+  const valid = new Set<string>(NAV_HREFS)
+  const cleaned = Array.from(new Set(allowedPages.filter(h => valid.has(h))))
+  // Dashboard must always be in every role's default so a user never lands
+  // somewhere they can't see anything.
+  if (!cleaned.includes('/dashboard')) cleaned.unshift('/dashboard')
+
+  const supabase = createServiceClient()
+  const { error } = await supabase
+    .from('role_permissions')
+    .upsert({ role, allowed_pages: cleaned, updated_at: new Date().toISOString() })
+  if (error) return { error: error.message }
+
+  revalidatePath('/', 'layout')
   return { error: null }
 }

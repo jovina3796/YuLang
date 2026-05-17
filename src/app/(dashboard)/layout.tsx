@@ -4,16 +4,19 @@ import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { getCurrentProfile } from '@/lib/auth'
 import { canAccess, resolveAllowedPages } from '@/lib/permissions'
+import { loadRoleDefaults } from '@/lib/rolePermissions.server'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile()
   if (!profile) redirect('/login')
 
+  const roleDefaults = await loadRoleDefaults()
+
   const hdrs = await headers()
   const pathname = hdrs.get('x-pathname') ?? ''
-  if (pathname && !canAccess(profile, pathname)) redirect('/dashboard')
+  if (pathname && !canAccess(profile, pathname, roleDefaults)) redirect('/dashboard')
 
-  const allowedPages = Array.from(resolveAllowedPages(profile))
+  const allowedPages = Array.from(resolveAllowedPages(profile, roleDefaults))
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>

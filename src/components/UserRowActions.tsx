@@ -3,15 +3,17 @@ import { useState } from 'react'
 import { PencilLine, Trash2, KeyRound, Unlink } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { deleteUser, resetUserPassword, unbindLine } from '@/app/(dashboard)/users/actions'
+import { type RoleDefaults } from '@/lib/permissions'
 import UserFormModal, { type UserRow, type DriverOption } from './UserFormModal'
 
 interface Props {
   user:    UserRow
   drivers: DriverOption[]
   isSelf:  boolean
+  roleDefaults?: RoleDefaults
 }
 
-export default function UserRowActions({ user, drivers, isSelf }: Props) {
+export default function UserRowActions({ user, drivers, isSelf, roleDefaults }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
@@ -51,6 +53,7 @@ export default function UserRowActions({ user, drivers, isSelf }: Props) {
         mode="edit"
         initial={user}
         drivers={drivers}
+        roleDefaults={roleDefaults}
         trigger={<button className="icon-btn" disabled={busy} title="編輯"><PencilLine size={14} /></button>}
       />
       <button className="icon-btn" onClick={handleResetPassword} disabled={busy} title="重設密碼">

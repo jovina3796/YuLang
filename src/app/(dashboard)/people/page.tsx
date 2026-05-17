@@ -1,12 +1,15 @@
+import { Users, UserCog, ShieldCheck } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/service'
 import DriverFormModal from '@/components/DriverFormModal'
 import DriverRowActions from '@/components/DriverRowActions'
 import UserFormModal from '@/components/UserFormModal'
 import UserRowActions from '@/components/UserRowActions'
 import PendingDriverAccountList from '@/components/PendingDriverAccountList'
+import RolePermissionsForm from '@/components/RolePermissionsForm'
 import SortableTh from '@/components/SortableTh'
-import PeopleTabs from '@/components/PeopleTabs'
+import SubNavTabs from '@/components/SubNavTabs'
 import { getCurrentProfile } from '@/lib/auth'
+import { loadRoleDefaults } from '@/lib/rolePermissions.server'
 
 const DRIVER_STATUS: Record<string, { label: string; cls: string }> = {
   active:   { label: '在職', cls: 'badge-green' },
@@ -19,7 +22,13 @@ const ROLE_LABEL: Record<string, { label: string; cls: string }> = {
   driver: { label: '司機',   cls: 'badge-green' },
 }
 
-type TabKey = 'drivers' | 'users'
+type TabKey = 'drivers' | 'users' | 'permissions'
+
+const TABS = [
+  { key: 'drivers'     as const, label: '司機資料',     Icon: Users },
+  { key: 'users'       as const, label: '登入帳號',     Icon: UserCog },
+  { key: 'permissions' as const, label: '權限設定',     Icon: ShieldCheck },
+]
 
 export default async function PeoplePage({
   searchParams,
@@ -27,18 +36,26 @@ export default async function PeoplePage({
   searchParams: Promise<{ tab?: string; sort?: string; dir?: string }>
 }) {
   const sp = await searchParams
-  const tab: TabKey = sp.tab === 'users' ? 'users' : 'drivers'
+  const tab: TabKey =
+    sp.tab === 'users' ? 'users' :
+    sp.tab === 'permissions' ? 'permissions' :
+    'drivers'
   const sortField = sp.sort ?? (tab === 'drivers' ? 'name' : 'email')
   const ascending = (sp.dir ?? 'asc') === 'asc'
 
   return (
     <div>
-      <PeopleTabs activeTab={tab} />
-      {tab === 'drivers'
-        ? <DriversTab sortField={sortField} ascending={ascending} />
-        : <UsersTab   sortField={sortField} ascending={ascending} />}
+      <SubNavTabs<TabKey> basePath="/people" tabs={TABS} activeTab={tab} />
+      {tab === 'drivers'     && <DriversTab sortField={sortField} ascending={ascending} />}
+      {tab === 'users'       && <UsersTab   sortField={sortField} ascending={ascending} />}
+      {tab === 'permissions' && <PermissionsTab />}
     </div>
   )
+}
+
+async function PermissionsTab() {
+  const defaults = await loadRoleDefaults()
+  return <RolePermissionsForm defaults={defaults} />
 }
 
 async function DriversTab({ sortField, ascending }: { sortField: string; ascending: boolean }) {
@@ -171,6 +188,7 @@ async function DriversTab({ sortField, ascending }: { sortField: string; ascendi
 async function UsersTab({ sortField, ascending }: { sortField: string; ascending: boolean }) {
   const me = await getCurrentProfile()
   const supabase = createServiceClient()
+  const roleDefaults = await loadRoleDefaults()
 
   const { data: profiles } = await supabase
     .from('user_profiles')
@@ -257,7 +275,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
       <PendingDriverAccountList drivers={pendingDrivers} />
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <UserFormModal mode="create" drivers={driverOptions} />
+        <UserFormModal mode="create" drivers={driverOptions} roleDefaults={roleDefaults} />
       </div>
       <div className="card">
         <div className="card-head">
@@ -324,6 +342,7 @@ async function UsersTab({ sortField, ascending }: { sortField: string; ascending
                         allowed_pages: r.allowed_pages,
                       }}
                       drivers={driverOptions}
+                      roleDefaults={roleDefaults}
                       isSelf={me?.id === r.id}
                     />
                   </td>

@@ -41,9 +41,11 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/settings':     '系統設定',
 }
 
-// Default page set per role. Used both as the upper bound for an admin's
-// per-user checkbox UI and as the fallback when allowed_pages is null.
-export const ROLE_DEFAULTS: Record<Role, readonly NavHref[]> = {
+export type RoleDefaults = Record<Role, readonly string[]>
+
+// Static fallback used when DB read fails or in contexts where loading is not
+// available. Admin-editable values live in role_permissions table (migration 028).
+export const ROLE_DEFAULTS_FALLBACK: RoleDefaults = {
   admin:  NAV_HREFS,
   driver: ['/dashboard', '/payroll', '/claims', '/leaves', '/overtimes'],
 }
@@ -53,11 +55,13 @@ export const ROLE_DEFAULTS: Record<Role, readonly NavHref[]> = {
  * - allowed_pages null → role default
  * - allowed_pages non-null → intersection with role default (defence-in-depth)
  */
-export function resolveAllowedPages(p: {
-  role: Role
-  allowed_pages: string[] | null
-}): Set<NavHref> {
-  const roleSet = new Set(ROLE_DEFAULTS[p.role])
+export function resolveAllowedPages(
+  p: { role: Role; allowed_pages: string[] | null },
+  defaults: RoleDefaults = ROLE_DEFAULTS_FALLBACK,
+): Set<NavHref> {
+  const roleSet = new Set<NavHref>(
+    defaults[p.role].filter((h): h is NavHref => (NAV_HREFS as readonly string[]).includes(h)),
+  )
   if (!p.allowed_pages) return roleSet
   const out = new Set<NavHref>()
   for (const h of p.allowed_pages) {
@@ -70,9 +74,10 @@ export function resolveAllowedPages(p: {
 export function canAccess(
   p: { role: Role; allowed_pages: string[] | null },
   pathname: string,
+  defaults: RoleDefaults = ROLE_DEFAULTS_FALLBACK,
 ): boolean {
   if (!pathname || pathname === '/') return true
-  const allowed = resolveAllowedPages(p)
+  const allowed = resolveAllowedPages(p, defaults)
   for (const h of allowed) {
     if (pathname === h || pathname.startsWith(h + '/')) return true
   }
@@ -83,9 +88,10 @@ export function canAccess(
 export function sanitizeAllowedPages(
   role: Role,
   raw: string[] | null | undefined,
+  defaults: RoleDefaults = ROLE_DEFAULTS_FALLBACK,
 ): string[] | null {
   if (!raw) return null
-  const upperBound = new Set<string>(ROLE_DEFAULTS[role])
+  const upperBound = new Set<string>(defaults[role])
   const set = new Set<string>()
   for (const h of raw) if (upperBound.has(h)) set.add(h)
   // null means "inherit role default" — store null when full set is selected

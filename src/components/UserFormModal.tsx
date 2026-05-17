@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { PencilLine, Plus, Link2, Link2Off } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createUser, updateUser, type UserInput, type Role } from '@/app/(dashboard)/users/actions'
-import { NAV_HREFS, NAV_LABELS, ROLE_DEFAULTS, type NavHref } from '@/lib/permissions'
+import { NAV_HREFS, NAV_LABELS, ROLE_DEFAULTS_FALLBACK, type NavHref, type RoleDefaults } from '@/lib/permissions'
 
 export type UserRow = {
   id:            string
@@ -25,11 +25,13 @@ interface Props {
   mode:     'create' | 'edit'
   initial?: UserRow
   drivers?: DriverOption[]   // retained for back-compat with callers; not used
+  roleDefaults?: RoleDefaults
   trigger?: React.ReactNode
 }
 
-export default function UserFormModal({ mode, initial, trigger }: Props) {
+export default function UserFormModal({ mode, initial, roleDefaults, trigger }: Props) {
   const router = useRouter()
+  const defaults: RoleDefaults = roleDefaults ?? ROLE_DEFAULTS_FALLBACK
 
   const [open,   setOpen]   = useState(false)
   const [saving, setSaving] = useState(false)
@@ -47,7 +49,7 @@ export default function UserFormModal({ mode, initial, trigger }: Props) {
   // null = 沿用角色預設（全勾），陣列 = 顯式子集
   const initialAllowed: Set<NavHref> = (() => {
     const role0 = initial?.role ?? 'admin'
-    const baseSet = new Set<NavHref>(ROLE_DEFAULTS[role0])
+    const baseSet = new Set<NavHref>(defaults[role0] as readonly NavHref[])
     if (!initial?.allowed_pages) return baseSet
     return new Set<NavHref>(initial.allowed_pages.filter(h => baseSet.has(h as NavHref)) as NavHref[])
   })()
@@ -58,13 +60,13 @@ export default function UserFormModal({ mode, initial, trigger }: Props) {
       setUsername(''); setDisplayName(''); setRealName(''); setPhone('')
       setEmail(''); setPassword(''); setLineId('')
       setRole('admin'); setIsActive(true)
-      setAllowed(new Set<NavHref>(ROLE_DEFAULTS.admin))
+      setAllowed(new Set<NavHref>(defaults.admin as readonly NavHref[]))
     }
   }
 
   function changeRole(next: Role) {
     setRole(next)
-    setAllowed(new Set<NavHref>(ROLE_DEFAULTS[next]))
+    setAllowed(new Set<NavHref>(defaults[next] as readonly NavHref[]))
   }
 
   function togglePage(href: NavHref) {
@@ -83,9 +85,9 @@ export default function UserFormModal({ mode, initial, trigger }: Props) {
       alert('用戶名僅允許 3-30 個小寫英數、底線、點'); return
     }
 
-    const roleDefaults = new Set<NavHref>(ROLE_DEFAULTS[role])
-    const allFull = allowed.size === roleDefaults.size &&
-      Array.from(roleDefaults).every(h => allowed.has(h))
+    const currentDefaults = new Set<NavHref>(defaults[role] as readonly NavHref[])
+    const allFull = allowed.size === currentDefaults.size &&
+      Array.from(currentDefaults).every(h => allowed.has(h))
     const allowedPagesPayload = allFull ? null : Array.from(allowed)
 
     const base: Omit<UserInput, 'password'> = {
@@ -235,7 +237,7 @@ export default function UserFormModal({ mode, initial, trigger }: Props) {
                   background: 'var(--bg)', border: '1px solid var(--border)',
                   borderRadius: 8, padding: 10,
                 }}>
-                  {NAV_HREFS.filter(h => ROLE_DEFAULTS[role].includes(h)).map(h => (
+                  {NAV_HREFS.filter(h => (defaults[role] as readonly string[]).includes(h)).map(h => (
                     <label key={h} style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       fontSize: 12, cursor: 'pointer',
