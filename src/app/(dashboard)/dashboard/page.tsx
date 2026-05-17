@@ -166,295 +166,299 @@ export default async function DashboardPage() {
   const allDriverNames = (drivers as any[]).map(d => d.name)
   const scheduleDrivers = Array.from(new Set([...allDriverNames, ...Object.keys(driverShiftMap)])).slice(0, 8)
 
-  const layoutStyle: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr 320px',
-    gridTemplateAreas: `
-      "kpiRev  kpiFuel  kpiSub   cal"
-      "trips   maint    vehicle  cal"
-      "trips   maint    people   cal"
-      "sched   sched    pending  memo"
-      "sched   sched    pending  login"
-    `,
-    gap: 14,
-    alignItems: 'stretch',
-  }
-
   return (
-    <div style={layoutStyle}>
-      <KpiCard area="kpiRev"  label="當月應收款項" value={kpi.receivable} color="var(--accent2)" />
-      <KpiCard area="kpiFuel" label="當月油耗費用" value={kpi.fuelCost}   color="var(--amber2)" />
-      <KpiCard area="kpiSub"  label="當月營收小計" value={kpi.subtotal}   color={kpi.subtotal >= 0 ? 'var(--blue)' : 'var(--red)'} />
+    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+      
+      {/* ================= 左側主區塊 (對應：紅色線左邊) ================= */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-      <div style={{ gridArea: 'cal' }}>
-        <DashboardCalendar markers={markers} />
-      </div>
-
-      {/* 車趟概覽 */}
-      <div className="card" style={{ gridArea: 'trips' }}>
-        <div className="card-head">
-          <div>
-            <div className="card-title">車趟概覽</div>
-            <div className="card-sub">本月最新 10 筆</div>
-          </div>
-          <Link href="/trips" className="btn btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>更多 <ArrowBigRightDash size={14} /></Link>
+        {/* --- 上層 KPI (對應：第一條綠色線上方的 3 等份) --- */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          <KpiCard label="當月應收款項" value={kpi.receivable} color="var(--accent2)" />
+          <KpiCard label="當月油耗費用" value={kpi.fuelCost}   color="var(--amber2)" />
+          <KpiCard label="當月營收小計" value={kpi.subtotal}   color={kpi.subtotal >= 0 ? 'var(--blue)' : 'var(--red)'} />
         </div>
-        <table style={{ tableLayout: 'fixed', width: '100%' }}>
-          <colgroup>
-            <col style={{ width: '20%' }} />
-            <col style={{ width: '30%' }} />
-            <col style={{ width: '30%' }} />
-            <col style={{ width: '20%' }} />
-          </colgroup>
-          <thead><tr>
-            <th style={{ textAlign: 'left' }}>日期</th>
-            <th style={{ textAlign: 'left' }}>廠商</th>
-            <th style={{ textAlign: 'left' }}>業務</th>
-            <th style={{ textAlign: 'center' }}>趟數</th>
-          </tr></thead>
-          <tbody>
-            {recentTrips.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
-            ) : recentTrips.map((t: any) => (
-              <tr key={t.id}>
-                <td className="mono" style={{ textAlign: 'left' }}>{t.departed_at ? t.departed_at.slice(5, 10).replace('-', '/') : ''}</td>
-                <td className="name" style={{ ...ellipsisCell, textAlign: 'left' }}>
-                  {t.vendors ? `${t.vendors.name}${t.vendors.warehouse ? `／${t.vendors.warehouse}` : ''}` : ''}
-                </td>
-                <td style={{ ...ellipsisCell, textAlign: 'left' }}>{t.vendor_rate_rules?.service_type ?? ''}</td>
-                <td className="mono" style={{ textAlign: 'center' }}>{t.trip_count ?? 1}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-      {/* 維修紀錄 */}
-      <div className="card" style={{ gridArea: 'maint' }}>
-        <div className="card-head">
-          <div>
-            <div className="card-title">維修紀錄</div>
-            <div className="card-sub">最新 10 筆</div>
-          </div>
-          <Link href="/maintenance" className="btn btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>更多 <ArrowBigRightDash size={14} /></Link>
-        </div>
-        <table style={{ tableLayout: 'fixed', width: '100%' }}>
-          <colgroup>
-            <col style={{ width: '20%' }} />
-            <col style={{ width: '30%' }} />
-            <col />
-          </colgroup>
-          <thead><tr>
-            <th style={{ textAlign: 'left' }}>日期</th>
-            <th style={{ textAlign: 'left' }}>廠商</th>
-            <th style={{ textAlign: 'left' }}>施作項目</th>
-          </tr></thead>
-          <tbody>
-            {maintenance.length === 0 ? (
-              <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
-            ) : (maintenance as any[]).map(m => (
-              <tr key={m.id}>
-                <td className="mono" style={{ textAlign: 'left' }}>{m.serviced_at?.slice(5).replace('-', '/') ?? ''}</td>
-                <td style={{ ...ellipsisCell, textAlign: 'left' }} title={m.vendor_name ?? ''}>{simplifyVendor(m.vendor_name)}</td>
-                <td style={{ ...ellipsisCell, color: 'var(--text2)', textAlign: 'left' }} title={m.type ?? ''}>{m.type ?? ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 車輛概況 */}
-      <div className="card" style={{ gridArea: 'vehicle' }}>
-        <div className="card-head">
-          <div className="card-title">車輛概況</div>
-          <Link href="/vehicles" className="btn btn-sm">更多</Link>
-        </div>
-        <table style={{ tableLayout: 'fixed', width: '100%' }}>
-          <colgroup>
-            <col style={{ width: '30%' }} />
-            <col style={{ width: '30%' }} />
-            <col style={{ width: '20%' }} />
-            <col style={{ width: '20%' }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'center' }}>車號</th>
-              <th style={{ textAlign: 'right' }}>里程數</th>
-              <th style={{ textAlign: 'center' }}>狀態</th>
-              <th style={{ textAlign: 'center' }}>更新日期</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vehicles.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
-            ) : vehicles.slice(0, 5).map((v: any) => {
-              const st = vehicleStatusBadge[v.status] ?? { label: v.status, cls: 'badge-blue' }
-              const updated = v.updated_at ?? lastInspect[v.id]
-              return (
-                <tr key={v.id}>
-                  <td className="mono" style={{ ...ellipsisCell, fontSize: 12, textAlign: 'center' }}>{v.plate_number}</td>
-                  <td className="mono" style={{ textAlign: 'right', fontSize: 12 }}>
-                    {(v.mileage ?? 0).toLocaleString()}
-                  </td>
-                  <td style={{ textAlign: 'center' }}><span className={`badge ${st.cls}`}>{st.label}</span></td>
-                  <td className="mono" style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
-                    {updated ? String(updated).slice(5, 10).replace('-', '/') : ''}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 人員管理 */}
-      <div className="card" style={{ gridArea: 'people' }}>
-        <div className="card-head">
-          <div className="card-title">人員管理</div>
-          <Link href="/drivers" className="btn btn-sm">更多</Link>
-        </div>
-        <table style={{ tableLayout: 'fixed', width: '100%' }}>
-          <colgroup>
-            <col style={{ width: 80 }} />
-            <col />
-          </colgroup>
-          <thead>
-            <tr><th style={{ textAlign: 'center' }}>姓名</th><th style={{ textAlign: 'left' }}>待簽核項目</th></tr>
-          </thead>
-          <tbody>
-            {drivers.length === 0 ? (
-              <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
-            ) : drivers.slice(0, 6).map((d: any) => {
-              const claimCount = (pendingClaims as any[]).filter(c => c.driver_id === d.id).length
-              const leaveCount = (pendingLeaves as any[]).filter(l => l.driver_id === d.id).length
-              const otCount    = (pendingOvertimes as any[]).filter(o => o.driver_id === d.id).length
-              const counts: Record<string, number> = { leave: leaveCount, claim: claimCount, overtime: otCount }
-              const hasAny = Object.values(counts).some(v => v > 0)
-              return (
-                <tr key={d.id}>
-                  <td className="name" style={{ ...ellipsisCell, fontSize: 12, textAlign: 'center' }}>{d.name}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {approvalCategories.map(cat => {
-                        const n = counts[cat.key] ?? 0
-                        const active = n > 0
-                        return (
-                          <span key={cat.key} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            fontSize: 12,
-                            color: active ? 'var(--amber2)' : 'var(--text3)',
-                            fontWeight: active ? 600 : 400,
-                          }}>
-                            <span style={{
-                              width: 6, height: 6, borderRadius: 6,
-                              background: active ? 'var(--amber2)' : 'var(--border2)',
-                            }} />
-                            {cat.label}{active ? ` ${n}` : ''}
-                          </span>
-                        )
-                      })}
-                      {!hasAny && (
-                        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>無</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 本週排班表 */}
-      <div className="card" style={{ gridArea: 'sched' }}>
-        <div className="card-head">
-          <div>
-            <div className="card-title">本週排班表</div>
-            <div className="card-sub">綠 ● 出勤　／　紅 休 排休</div>
-          </div>
-          <Link href="/schedule" className="btn btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>更多 <ArrowBigRightDash size={14} /></Link>
-        </div>
-        <table style={{ tableLayout: 'fixed', width: '100%' }}>
-          <colgroup>
-            <col style={{ width: 120 }} />
-            {weekDays.map(d => <col key={d.iso} />)}
-          </colgroup>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'center' }}>人員 / 日期</th>
-              {weekDays.map(d => (
-                <th key={d.iso} className="mono" style={{ textAlign: 'center', fontSize: 11 }}>
-                  {d.label}<br /><span style={{ color: 'var(--text3)', fontWeight: 400 }}>週{d.weekday}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {scheduleDrivers.length === 0 ? (
-              <tr><td colSpan={weekDays.length + 1} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無人員</td></tr>
-            ) : scheduleDrivers.map(name => (
-              <tr key={name}>
-                <td className="name" style={{ ...ellipsisCell, fontSize: 12, textAlign: 'center' }}>{name}</td>
-                {weekDays.map(d => {
-                  const sh = driverShiftMap[name]?.[d.iso]
-                  if (!sh) {
-                    return <td key={d.iso} className="mono" style={{ textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>—</td>
-                  }
-                  const isRest = /休/.test(sh)
-                  return (
-                    <td key={d.iso} style={{ textAlign: 'center', fontSize: 13 }}>
-                      {isRest ? (
-                        <span style={{ color: 'var(--red)', fontWeight: 600 }}>休</span>
-                      ) : (
-                        <span style={{ color: 'var(--accent2)', fontSize: 16 }}>●</span>
-                      )}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 待支付款項 */}
-      <div className="card" style={{ gridArea: 'pending' }}>
-        <div className="card-head">
-          <div>
-            <div className="card-title">待支付款項</div>
-            <div className="card-sub">現金 / 轉帳</div>
-          </div>
-          <Link href="/misc" className="btn btn-sm">更多</Link>
-        </div>
-        <div>
-          {pending.length === 0 ? (
-            <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>無待支付項目</div>
-          ) : pending.slice(0, 6).map((p: any) => (
-            <div key={p.id} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 8,
-              padding: '8px 14px', borderBottom: '1px solid var(--border)',
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.category ?? '其他'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.payment_method ?? ''}　應付 {(p.due_date ?? p.transaction_date)?.slice(5).replace('-', '/')}
-                </div>
+        {/* --- 中層 概覽 (對應：第一與第二條綠色線之間的 3 等份) --- */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          
+          {/* 車趟概覽 */}
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">車趟概覽</div>
+                <div className="card-sub">本月最新 10 筆</div>
               </div>
-              <span className="mono" style={{ fontSize: 12, color: 'var(--amber2)' }}>
-                {Number(p.amount ?? 0).toLocaleString()}
-              </span>
+              <Link href="/trips" className="btn btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>更多 <ArrowBigRightDash size={14} /></Link>
             </div>
-          ))}
+            <table style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '20%' }} />
+              </colgroup>
+              <thead><tr>
+                <th style={{ textAlign: 'left' }}>日期</th>
+                <th style={{ textAlign: 'left' }}>廠商</th>
+                <th style={{ textAlign: 'left' }}>業務</th>
+                <th style={{ textAlign: 'center' }}>趟數</th>
+              </tr></thead>
+              <tbody>
+                {recentTrips.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
+                ) : recentTrips.map((t: any) => (
+                  <tr key={t.id}>
+                    <td className="mono" style={{ textAlign: 'left' }}>{t.departed_at ? t.departed_at.slice(5, 10).replace('-', '/') : ''}</td>
+                    <td className="name" style={{ ...ellipsisCell, textAlign: 'left' }}>
+                      {t.vendors ? `${t.vendors.name}${t.vendors.warehouse ? `／${t.vendors.warehouse}` : ''}` : ''}
+                    </td>
+                    <td style={{ ...ellipsisCell, textAlign: 'left' }}>{t.vendor_rate_rules?.service_type ?? ''}</td>
+                    <td className="mono" style={{ textAlign: 'center' }}>{t.trip_count ?? 1}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 維修紀錄 */}
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">維修紀錄</div>
+                <div className="card-sub">最新 10 筆</div>
+              </div>
+              <Link href="/maintenance" className="btn btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>更多 <ArrowBigRightDash size={14} /></Link>
+            </div>
+            <table style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '30%' }} />
+                <col />
+              </colgroup>
+              <thead><tr>
+                <th style={{ textAlign: 'left' }}>日期</th>
+                <th style={{ textAlign: 'left' }}>廠商</th>
+                <th style={{ textAlign: 'left' }}>施作項目</th>
+              </tr></thead>
+              <tbody>
+                {maintenance.length === 0 ? (
+                  <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
+                ) : (maintenance as any[]).map(m => (
+                  <tr key={m.id}>
+                    <td className="mono" style={{ textAlign: 'left' }}>{m.serviced_at?.slice(5).replace('-', '/') ?? ''}</td>
+                    <td style={{ ...ellipsisCell, textAlign: 'left' }} title={m.vendor_name ?? ''}>{simplifyVendor(m.vendor_name)}</td>
+                    <td style={{ ...ellipsisCell, color: 'var(--text2)', textAlign: 'left' }} title={m.type ?? ''}>{m.type ?? ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 右側這欄包含上下兩個卡片 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* 車輛概況 */}
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">車輛概況</div>
+                <Link href="/vehicles" className="btn btn-sm">更多</Link>
+              </div>
+              <table style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '20%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'center' }}>車號</th>
+                    <th style={{ textAlign: 'right' }}>里程數</th>
+                    <th style={{ textAlign: 'center' }}>狀態</th>
+                    <th style={{ textAlign: 'center' }}>更新日期</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vehicles.length === 0 ? (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
+                  ) : vehicles.slice(0, 5).map((v: any) => {
+                    const st = vehicleStatusBadge[v.status] ?? { label: v.status, cls: 'badge-blue' }
+                    const updated = v.updated_at ?? lastInspect[v.id]
+                    return (
+                      <tr key={v.id}>
+                        <td className="mono" style={{ ...ellipsisCell, fontSize: 12, textAlign: 'center' }}>{v.plate_number}</td>
+                        <td className="mono" style={{ textAlign: 'right', fontSize: 12 }}>
+                          {(v.mileage ?? 0).toLocaleString()}
+                        </td>
+                        <td style={{ textAlign: 'center' }}><span className={`badge ${st.cls}`}>{st.label}</span></td>
+                        <td className="mono" style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
+                          {updated ? String(updated).slice(5, 10).replace('-', '/') : ''}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 人員管理 */}
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">人員管理</div>
+                <Link href="/drivers" className="btn btn-sm">更多</Link>
+              </div>
+              <table style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                  <col style={{ width: 80 }} />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr><th style={{ textAlign: 'center' }}>姓名</th><th style={{ textAlign: 'left' }}>待簽核項目</th></tr>
+                </thead>
+                <tbody>
+                  {drivers.length === 0 ? (
+                    <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
+                  ) : drivers.slice(0, 6).map((d: any) => {
+                    const claimCount = (pendingClaims as any[]).filter(c => c.driver_id === d.id).length
+                    const leaveCount = (pendingLeaves as any[]).filter(l => l.driver_id === d.id).length
+                    const otCount    = (pendingOvertimes as any[]).filter(o => o.driver_id === d.id).length
+                    const counts: Record<string, number> = { leave: leaveCount, claim: claimCount, overtime: otCount }
+                    const hasAny = Object.values(counts).some(v => v > 0)
+                    return (
+                      <tr key={d.id}>
+                        <td className="name" style={{ ...ellipsisCell, fontSize: 12, textAlign: 'center' }}>{d.name}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            {approvalCategories.map(cat => {
+                              const n = counts[cat.key] ?? 0
+                              const active = n > 0
+                              return (
+                                <span key={cat.key} style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  fontSize: 12,
+                                  color: active ? 'var(--amber2)' : 'var(--text3)',
+                                  fontWeight: active ? 600 : 400,
+                                }}>
+                                  <span style={{
+                                    width: 6, height: 6, borderRadius: 6,
+                                    background: active ? 'var(--amber2)' : 'var(--border2)',
+                                  }} />
+                                  {cat.label}{active ? ` ${n}` : ''}
+                                </span>
+                              )
+                            })}
+                            {!hasAny && (
+                              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>無</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
+
+        {/* --- 下層 排班與待支付 (對應：第二條綠色線下方，分為 2fr 與 1fr) --- */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
+          
+          {/* 本週排班表 */}
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">本週排班表</div>
+                <div className="card-sub">綠 ● 出勤　／　紅 休 排休</div>
+              </div>
+              <Link href="/schedule" className="btn btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>更多 <ArrowBigRightDash size={14} /></Link>
+            </div>
+            <table style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                <col style={{ width: 120 }} />
+                {weekDays.map(d => <col key={d.iso} />)}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'center' }}>人員 / 日期</th>
+                  {weekDays.map(d => (
+                    <th key={d.iso} className="mono" style={{ textAlign: 'center', fontSize: 11 }}>
+                      {d.label}<br /><span style={{ color: 'var(--text3)', fontWeight: 400 }}>週{d.weekday}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {scheduleDrivers.length === 0 ? (
+                  <tr><td colSpan={weekDays.length + 1} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無人員</td></tr>
+                ) : scheduleDrivers.map(name => (
+                  <tr key={name}>
+                    <td className="name" style={{ ...ellipsisCell, fontSize: 12, textAlign: 'center' }}>{name}</td>
+                    {weekDays.map(d => {
+                      const sh = driverShiftMap[name]?.[d.iso]
+                      if (!sh) {
+                        return <td key={d.iso} className="mono" style={{ textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>—</td>
+                      }
+                      const isRest = /休/.test(sh)
+                      return (
+                        <td key={d.iso} style={{ textAlign: 'center', fontSize: 13 }}>
+                          {isRest ? (
+                            <span style={{ color: 'var(--red)', fontWeight: 600 }}>休</span>
+                          ) : (
+                            <span style={{ color: 'var(--accent2)', fontSize: 16 }}>●</span>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 待支付款項 */}
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">待支付款項</div>
+                <div className="card-sub">現金 / 轉帳</div>
+              </div>
+              <Link href="/misc" className="btn btn-sm">更多</Link>
+            </div>
+            <div>
+              {pending.length === 0 ? (
+                <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>無待支付項目</div>
+              ) : pending.slice(0, 6).map((p: any) => (
+                <div key={p.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8,
+                  padding: '8px 14px', borderBottom: '1px solid var(--border)',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.category ?? '其他'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.payment_method ?? ''}　應付 {(p.due_date ?? p.transaction_date)?.slice(5).replace('-', '/')}
+                    </div>
+                  </div>
+                  <span className="mono" style={{ fontSize: 12, color: 'var(--amber2)' }}>
+                    {Number(p.amount ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      <div style={{ gridArea: 'memo' }}>
+      {/* ================= 右側側邊欄 (對應：紅色線右邊) ================= */}
+      <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ height: '425px', display: 'flex', flexDirection: 'column' }}>
+          <DashboardCalendar markers={markers} />
+        </div>
         <NotesPanel notes={notes} />
-      </div>
-
-      <div style={{ gridArea: 'login' }}>
         <LoginInfoPanel />
       </div>
+
     </div>
   )
 }
@@ -466,9 +470,9 @@ const ellipsisCell: React.CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-function KpiCard({ area, label, value, color }: { area: string; label: string; value: number; color: string }) {
+function KpiCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="card" style={{ gridArea: area, padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
+    <div className="card" style={{ padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
       <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{label}</div>
       <div style={{ fontSize: 26, fontWeight: 700, fontFamily: 'var(--mono)', color, lineHeight: 1 }}>
         {value !== 0 ? Math.round(value).toLocaleString() : ''}

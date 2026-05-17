@@ -55,7 +55,7 @@ export default function DashboardCalendar({ markers = [] }: Props) {
     cells.push({ y: view.y, m: view.m - 1, d: prevMonthDays - startWeekdayMonFirst + 1 + i, outside: true })
   }
   for (let d = 1; d <= daysInMonth; d++) cells.push({ y: view.y, m: view.m, d, outside: false })
-  while (cells.length % 7 !== 0) {
+  while (cells.length < 42) {
     const next = cells.length - startWeekdayMonFirst - daysInMonth + 1
     cells.push({ y: view.y, m: view.m + 1, d: next, outside: true })
   }
@@ -69,7 +69,7 @@ export default function DashboardCalendar({ markers = [] }: Props) {
     y === today.getFullYear() && m === today.getMonth() && d === today.getDate()
 
   return (
-    <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column' }}>
+    <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
         <button onClick={() => shift(-1)} className="icon-btn" style={{ width: 26, height: 26 }}>‹</button>
         <div style={{ flex: 1, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600 }}>
@@ -138,7 +138,7 @@ export default function DashboardCalendar({ markers = [] }: Props) {
           </div>
         </>
       ) : (
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {sortedMarkers.length === 0 ? (
             <div style={{ padding: '24px 4px', textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>
               尚無待辦事項
