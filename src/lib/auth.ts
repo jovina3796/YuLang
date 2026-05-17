@@ -3,6 +3,16 @@ import { createServiceClient } from '@/lib/supabase/service'
 
 export type Role = 'admin' | 'driver'
 
+export type CustomTheme = {
+  bg:      string
+  bg2:     string
+  text:    string
+  text2:   string
+  border:  string
+  accent:  string
+  accent2: string
+}
+
 export type Profile = {
   id:           string
   email:        string | null
@@ -10,6 +20,7 @@ export type Profile = {
   driver_id:    string | null
   display_name: string | null
   avatar_url:   string | null
+  theme:        CustomTheme | null
 }
 
 export async function getCurrentProfile(): Promise<Profile | null> {
@@ -20,7 +31,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   const service = createServiceClient()
   const { data: profile } = await service
     .from('user_profiles')
-    .select('id, role, driver_id, display_name, avatar_url, is_active')
+    .select('id, role, driver_id, display_name, avatar_url, is_active, theme')
     .eq('id', user.id)
     .single()
 
@@ -33,5 +44,6 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     driver_id:    profile.driver_id,
     display_name: profile.display_name,
     avatar_url:   profile.avatar_url ?? null,
+    theme:        (profile.theme ?? null) as CustomTheme | null,
   }
 }

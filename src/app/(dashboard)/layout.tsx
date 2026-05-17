@@ -22,6 +22,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {profile.theme && (
+        <style dangerouslySetInnerHTML={{ __html: `
+html[data-accent="custom"]{
+  --bg:${profile.theme.bg};
+  --bg2:${profile.theme.bg2};
+  --text:${profile.theme.text};
+  --text2:${profile.theme.text2};
+  --border:${profile.theme.border};
+  --accent:${profile.theme.accent};
+  --accent2:${profile.theme.accent2};
+}`.trim() }} />
+      )}
       <Sidebar
         role={profile.role}
         email={profile.email}
