@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getCurrentProfile } from '@/lib/auth'
-import { NAV_HREFS, sanitizeAllowedPages } from '@/lib/permissions'
+import { NAV_HREFS, sanitizeAllowedPages, sanitizeDashboardSections } from '@/lib/permissions'
 import { loadRoleDefaults } from '@/lib/rolePermissions.server'
 import { deriveDriverCredentials } from '@/lib/driverCredentials'
 
@@ -283,5 +283,26 @@ export async function saveRoleDefaults(role: Role, allowedPages: string[]) {
   if (error) return { error: error.message }
 
   revalidatePath('/', 'layout')
+  return { error: null }
+}
+
+/** Save the default visible dashboard section list for a role. */
+export async function saveRoleDashboardSections(role: Role, sections: string[]) {
+  const guard = await ensureAdmin()
+  if (guard.error) return { error: guard.error }
+  if (role !== 'admin' && role !== 'driver') return { error: '無效的角色' }
+
+  const cleaned = sanitizeDashboardSections(sections)
+
+  const supabase = createServiceClient()
+  // Upsert without clobbering allowed_pages: if row missing we still need it
+  // to exist before we can update sections, so first ensure row, then update.
+  const { error: upErr } = await supabase
+    .from('role_permissions')
+    .update({ allowed_dashboard_sections: cleaned, updated_at: new Date().toISOString() })
+    .eq('role', role)
+  if (upErr) return { error: upErr.message }
+
+  revalidatePath('/dashboard')
   return { error: null }
 }

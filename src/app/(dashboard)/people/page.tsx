@@ -9,7 +9,7 @@ import RolePermissionsForm from '@/components/RolePermissionsForm'
 import SortableTh from '@/components/SortableTh'
 import SubNavTabs from '@/components/SubNavTabs'
 import { getCurrentProfile } from '@/lib/auth'
-import { loadRoleDefaults } from '@/lib/rolePermissions.server'
+import { loadRoleDefaults, loadRolePermissions } from '@/lib/rolePermissions.server'
 
 const DRIVER_STATUS: Record<string, { label: string; cls: string }> = {
   active:   { label: '在職', cls: 'badge-green' },
@@ -54,8 +54,8 @@ export default async function PeoplePage({
 }
 
 async function PermissionsTab() {
-  const defaults = await loadRoleDefaults()
-  return <RolePermissionsForm defaults={defaults} />
+  const { pages, sections } = await loadRolePermissions()
+  return <RolePermissionsForm defaults={pages} sections={sections} />
 }
 
 async function DriversTab({ sortField, ascending }: { sortField: string; ascending: boolean }) {

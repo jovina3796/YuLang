@@ -50,6 +50,50 @@ export const ROLE_DEFAULTS_FALLBACK: RoleDefaults = {
   driver: ['/dashboard', '/payroll', '/claims', '/leaves', '/overtimes'],
 }
 
+// === Dashboard sections (Q2) ===
+// Each represents one card on /dashboard. Admin can hide individual cards
+// per role via /people?tab=permissions. Stored in role_permissions.allowed_dashboard_sections.
+export const DASHBOARD_SECTIONS = [
+  'kpi',
+  'recent_trips',
+  'maintenance',
+  'vehicles',
+  'people_approvals',
+  'schedule',
+  'pending_payments',
+  'calendar',
+  'notes',
+  'login_info',
+] as const
+export type DashboardSection = (typeof DASHBOARD_SECTIONS)[number]
+
+export const DASHBOARD_SECTION_LABELS: Record<DashboardSection, string> = {
+  kpi:              'KPI 數據（應收 / 油耗 / 營收）',
+  recent_trips:     '車趟概覽',
+  maintenance:      '維修紀錄',
+  vehicles:         '車輛概況',
+  people_approvals: '人員管理（待簽核）',
+  schedule:         '本週排班表',
+  pending_payments: '待支付款項',
+  calendar:         '月曆與待辦',
+  notes:            '備忘錄',
+  login_info:       '登入資訊',
+}
+
+export type RoleDashboardSections = Record<Role, readonly DashboardSection[]>
+
+export const DASHBOARD_SECTIONS_FALLBACK: RoleDashboardSections = {
+  admin:  DASHBOARD_SECTIONS,
+  driver: ['schedule', 'calendar', 'notes', 'login_info'],
+}
+
+/** Validate dashboard section payload against the canonical list. */
+export function sanitizeDashboardSections(raw: string[] | null | undefined): string[] {
+  const valid = new Set<string>(DASHBOARD_SECTIONS)
+  if (!raw) return []
+  return Array.from(new Set(raw.filter(s => valid.has(s))))
+}
+
 /**
  * Resolve the effective allow-set for a profile.
  * - allowed_pages null → role default

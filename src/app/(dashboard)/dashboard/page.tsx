@@ -5,6 +5,8 @@ import DashboardCalendar, { type Marker } from '@/components/DashboardCalendar'
 import NotesPanel from '@/components/NotesPanel'
 import LoginInfoPanel from '@/components/LoginInfoPanel'
 import { getMonthlyKpis } from '@/lib/monthlyKpi'
+import { getCurrentProfile } from '@/lib/auth'
+import { loadDashboardSectionsFor } from '@/lib/rolePermissions.server'
 
 const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -120,6 +122,9 @@ const approvalCategories: { key: string; label: string }[] = [
 ]
 
 export default async function DashboardPage() {
+  const profile = await getCurrentProfile()
+  const vis = await loadDashboardSectionsFor(profile?.role ?? 'driver')
+
   const [
     kpi,
     {
@@ -174,16 +179,19 @@ export default async function DashboardPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
         {/* --- 上層 KPI (對應：第一條綠色線上方的 3 等份) --- */}
+        {vis.has('kpi') && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           <KpiCard label="當月應收款項" value={kpi.receivable} color="var(--accent2)" />
           <KpiCard label="當月油耗費用" value={kpi.fuelCost}   color="var(--amber2)" />
           <KpiCard label="當月營收小計" value={kpi.subtotal}   color={kpi.subtotal >= 0 ? 'var(--blue)' : 'var(--red)'} />
         </div>
+        )}
 
         {/* --- 中層 概覽 (對應：第一與第二條綠色線之間的 3 等份) --- */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           
           {/* 車趟概覽 */}
+          {vis.has('recent_trips') && (
           <div className="card">
             <div className="card-head">
               <div>
@@ -221,8 +229,10 @@ export default async function DashboardPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* 維修紀錄 */}
+          {vis.has('maintenance') && (
           <div className="card">
             <div className="card-head">
               <div>
@@ -255,10 +265,12 @@ export default async function DashboardPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* 右側這欄包含上下兩個卡片 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* 車輛概況 */}
+            {vis.has('vehicles') && (
             <div className="card">
               <div className="card-head">
                 <div className="card-title">車輛概況</div>
@@ -301,8 +313,10 @@ export default async function DashboardPage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* 人員管理 */}
+            {vis.has('people_approvals') && (
             <div className="card">
               <div className="card-head">
                 <div className="card-title">人員管理</div>
@@ -359,6 +373,7 @@ export default async function DashboardPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         </div>
 
@@ -366,6 +381,7 @@ export default async function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
           
           {/* 本週排班表 */}
+          {vis.has('schedule') && (
           <div className="card">
             <div className="card-head">
               <div>
@@ -416,8 +432,10 @@ export default async function DashboardPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* 待支付款項 */}
+          {vis.has('pending_payments') && (
           <div className="card">
             <div className="card-head">
               <div>
@@ -447,17 +465,20 @@ export default async function DashboardPage() {
               ))}
             </div>
           </div>
+          )}
         </div>
 
       </div>
 
       {/* ================= 右側側邊欄 (對應：紅色線右邊) ================= */}
       <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {vis.has('calendar') && (
         <div style={{ height: '425px', display: 'flex', flexDirection: 'column' }}>
           <DashboardCalendar markers={markers} />
         </div>
-        <NotesPanel notes={notes} />
-        <LoginInfoPanel />
+        )}
+        {vis.has('notes') && <NotesPanel notes={notes} />}
+        {vis.has('login_info') && <LoginInfoPanel />}
       </div>
 
     </div>
