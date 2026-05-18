@@ -18,7 +18,9 @@ export const NAV_HREFS = [
   '/reports',
   '/finance',
   '/payroll',
-  '/vendor-info',
+  '/vendor-info/vendors',
+  '/vendor-info/rates',
+  '/vendor-info/subroutes',
   '/claims',
   '/leaves',
   '/overtimes',
@@ -40,7 +42,9 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/reports':             '統計報表',
   '/finance':             '收支報表',
   '/payroll':             '薪資單據',
-  '/vendor-info':         '廠商資訊',
+  '/vendor-info/vendors':    '廠商資訊 — 廠商設定',
+  '/vendor-info/rates':      '廠商資訊 — 運費設定',
+  '/vendor-info/subroutes':  '廠商資訊 — 配送區域對應',
   '/claims':              '請款簽核',
   '/leaves':              '請假簽核',
   '/overtimes':           '加班簽核',
@@ -54,6 +58,10 @@ export const NAV_PARENTS: Record<string, { label: string; subs: NavHref[] }> = {
   '/people': {
     label: '人員管理',
     subs:  ['/people/drivers', '/people/users', '/people/permissions'],
+  },
+  '/vendor-info': {
+    label: '廠商資訊',
+    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes'],
   },
 }
 

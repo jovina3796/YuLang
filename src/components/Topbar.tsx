@@ -21,6 +21,10 @@ const pageTitles: Record<string, string> = {
   '/payroll':     '薪資單據',
   '/vendors':     '廠商設定',
   '/rates':       '運費設定',
+  '/vendor-info':              '廠商資訊',
+  '/vendor-info/vendors':      '廠商設定',
+  '/vendor-info/rates':        '運費設定',
+  '/vendor-info/subroutes':    '配送區域對應',
   '/settings':    '設定',
 }
 

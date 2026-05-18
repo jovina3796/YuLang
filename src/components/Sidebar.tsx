@@ -43,7 +43,10 @@ const nav: NavGroup[] = [
     { href: '/reports',      Icon: ChartColumnIncreasing, label: '統計報表' },
     { href: '/finance',      Icon: ReceiptText,     label: '收支報表' },
     { href: '/payroll',      Icon: FileSpreadsheet, label: '薪資單據' },
-    { href: '/vendor-info',  Icon: Building2,       label: '廠商資訊' },
+    {
+      Icon: Building2, label: '廠商資訊',
+      subs: ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes'],
+    },
   ]},
   { section: '簽核項目', items: [
     { href: '/claims',       Icon: HandCoins,       label: '請款簽核' },
