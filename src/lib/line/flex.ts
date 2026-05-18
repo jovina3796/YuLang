@@ -226,6 +226,73 @@ export function tripParseErrorBubble(originalText: string, reason: string, liffU
   return bubble
 }
 
+export type MaintenanceSummary = {
+  date:        string
+  plate:       string
+  type:        string
+  vendor?:     string | null
+  cost?:       number | null
+  mileage?:    number | null
+  next_due?:   string | null
+}
+
+export function maintenanceSuccessBubble(s: MaintenanceSummary): FlexBubble {
+  const rows: FlexComponent[] = []
+  rows.push(row('日期', s.date))
+  rows.push(row('車輛', s.plate))
+  rows.push(row('項目', s.type))
+  if (s.vendor)         rows.push(row('廠商', s.vendor))
+  if (s.cost != null)   rows.push(row('金額', `NT$ ${s.cost.toLocaleString()}`))
+  if (s.mileage != null)rows.push(row('里程', `${s.mileage} km`))
+  if (s.next_due)       rows.push(row('下次', s.next_due))
+
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '維修保養已記錄 ✓', weight: 'bold', size: 'lg', color: GREEN, align: 'center' },
+        { type: 'separator', margin: 'md', color: BORDER },
+        { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: rows },
+      ],
+    },
+  }
+}
+
+export function maintenanceFormTriggerBubble(liffUrl: string): FlexBubble {
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '20px',
+      spacing: 'md',
+      contents: [
+        { type: 'text', text: '維修保養回報', weight: 'bold', size: 'lg', color: '#222222' },
+        { type: 'text', text: '上傳維修單照片或 PDF，AI 會自動辨識項目、金額、廠商等資訊。', size: 'sm', color: MUTED, wrap: true },
+      ],
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '12px',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: GREEN,
+          height: 'md',
+          action: { type: 'uri', label: '填寫維修表單', uri: liffUrl },
+        },
+      ],
+    },
+  }
+}
+
 export function tripFormTriggerBubble(liffUrl: string): FlexBubble {
   return {
     type: 'bubble',
