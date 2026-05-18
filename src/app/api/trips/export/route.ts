@@ -46,7 +46,9 @@ export async function GET(req: NextRequest) {
   ]
 
   const rows = (data ?? []).map((t: any) => {
-    const date = t.departed_at ? new Date(t.departed_at).toISOString().split('T')[0] : ''
+    const date = t.departed_at
+      ? new Date(t.departed_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
+      : ''
     return [
       date,
       t.vendors?.name      ?? '',

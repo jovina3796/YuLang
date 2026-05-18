@@ -167,7 +167,7 @@ export default async function TripsPage({
                 <tr key={t.id}>
                   <td className="mono" style={{ textAlign: 'center' }}>
                     {t.departed_at
-                      ? new Date(t.departed_at).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' })
+                      ? new Date(t.departed_at).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Taipei' })
                       : ''}
                   </td>
                   <td className="name" style={{ textAlign: 'left' }}>

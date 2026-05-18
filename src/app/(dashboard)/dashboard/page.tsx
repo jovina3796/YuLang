@@ -218,7 +218,7 @@ export default async function DashboardPage() {
                   <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text3)', padding: 18 }}>尚無資料</td></tr>
                 ) : recentTrips.map((t: any) => (
                   <tr key={t.id}>
-                    <td className="mono" style={{ textAlign: 'left' }}>{t.departed_at ? t.departed_at.slice(5, 10).replace('-', '/') : ''}</td>
+                    <td className="mono" style={{ textAlign: 'left' }}>{t.departed_at ? new Date(t.departed_at).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Taipei' }).replace(/\//g, '/') : ''}</td>
                     <td className="name" style={{ ...ellipsisCell, textAlign: 'left' }}>
                       {t.vendors ? `${t.vendors.name}${t.vendors.warehouse ? `／${t.vendors.warehouse}` : ''}` : ''}
                     </td>
