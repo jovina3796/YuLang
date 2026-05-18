@@ -2,7 +2,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { reply, textMessage } from '@/lib/line/api'
 import { resetSession, saveSession } from '@/lib/line/session'
 
-export const MENU_HINT = '加油回報：\n• 快速：加油 [里程] [付款] [金額]（例：加油 318657 阿哲卡 2285）\n• 逐步引導：輸入「加油」'
+export const MENU_HINT = '可用指令：\n• 加油回報：輸入「加油」開啟表單，或快速：加油 [里程] [付款] [金額]\n• 車趟回報：\n  - 表單：輸入「車趟」\n  - 快速：日期 + 車趟（例：2號 低鮮 冷鏈永和10）\n  - 休假：日期 休息（例：4號 休息）'
 
 export async function findDriverByLineUserId(lineUserId: string): Promise<{ id: string; name: string } | null> {
   const supabase = createServiceClient()

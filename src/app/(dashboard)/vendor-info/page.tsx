@@ -239,13 +239,14 @@ async function RatesTab({ sortField, ascending }: { sortField: string; ascending
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '10%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '7%' }} />
                   <col style={{ width: '8%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '8%' }} />
-                  <col style={{ width: '8%' }} />
-                  <col style={{ width: '8%' }} />
-                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '6%' }} />
                   <col style={{ width: '6%' }} />
                 </colgroup>
                 <thead>
@@ -260,6 +261,7 @@ async function RatesTab({ sortField, ascending }: { sortField: string; ascending
                     <SortableTh field="surcharge_per_stop" defaultField="display_order" defaultDir="asc" align="right">超點費／件</SortableTh>
                     <SortableTh field="special_rate" defaultField="display_order" defaultDir="asc" align="center">特殊加成</SortableTh>
                     <SortableTh field="is_active" defaultField="display_order" defaultDir="asc" align="center">狀態</SortableTh>
+                    <th style={{ textAlign: 'center' }}>預設</th>
                     <th style={{ textAlign: 'right' }}>操作</th>
                   </tr>
                 </thead>
@@ -293,6 +295,11 @@ async function RatesTab({ sortField, ascending }: { sortField: string; ascending
                         {r.is_active
                           ? <span className="badge badge-green">啟用</span>
                           : <span className="badge badge-red">停用</span>}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {r.is_service_default
+                          ? <span className="badge badge-blue">預設</span>
+                          : <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>}
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <RateRuleRowActions rule={r} vendors={vendors ?? []} />

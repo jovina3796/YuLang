@@ -2,6 +2,8 @@ import { headers } from 'next/headers'
 import { verifyLineSignature } from '@/lib/line/signature'
 import { findDriverByLineUserId, handleBindingInput, startBinding, MENU_HINT } from '@/lib/line/flows/bind'
 import { handleFuel, handleFuelEntry } from '@/lib/line/flows/fuel'
+import { startTrip } from '@/lib/line/flows/trip'
+import { handleTripText, looksLikeTripText } from '@/lib/line/flows/tripText'
 import { loadSession, resetSession } from '@/lib/line/session'
 import { reply, textMessage } from '@/lib/line/api'
 
@@ -107,6 +109,18 @@ async function handleEvent(event: LineEvent): Promise<void> {
     // 「加油」開頭一律當新指令（含逐步引導與快速回報），不論目前 session 狀態
     if (text && /^加油(\s|$)/.test(text)) {
       await handleFuelEntry(driver.id, userId, replyToken, text)
+      return
+    }
+
+    // 「車趟」開頭：以 LIFF 表單回報
+    if (text && /^車趟(\s|$)/.test(text)) {
+      await startTrip(userId, replyToken)
+      return
+    }
+
+    // 純文字車趟回報（以日期開頭：N號 / 今天 / M月N日 / M/N）
+    if (text && looksLikeTripText(text)) {
+      await handleTripText(driver.id, driver.name, userId, replyToken, text)
       return
     }
 

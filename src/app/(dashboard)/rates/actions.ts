@@ -19,6 +19,7 @@ export type RateRuleInput = {
   commission_mode:       string
   seasonal_note:         string | null
   is_active:             boolean
+  is_service_default:    boolean
   display_order:         number | null
 }
 

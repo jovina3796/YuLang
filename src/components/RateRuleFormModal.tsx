@@ -24,6 +24,7 @@ export type RateRuleRow = {
   commission_mode:       string
   seasonal_note:         string | null
   is_active:             boolean
+  is_service_default:    boolean
   display_order:         number | null
 }
 
@@ -67,6 +68,7 @@ export default function RateRuleFormModal({ vendors, mode, initial, trigger }: P
   const [commissionMode,      setCommissionMode]      = useState(initial?.commission_mode ?? 'single')
   const [seasonalNote,        setSeasonalNote]        = useState(initial?.seasonal_note ?? '')
   const [isActive,            setIsActive]            = useState(initial?.is_active ?? true)
+  const [isServiceDefault,    setIsServiceDefault]    = useState(initial?.is_service_default ?? false)
   const [displayOrder,        setDisplayOrder]        = useState<number | ''>(initial?.display_order ?? '')
 
   function resetForm() {
@@ -75,7 +77,7 @@ export default function RateRuleFormModal({ vendors, mode, initial, trigger }: P
       setPricingMode('flat'); setHasKpi(false); setBaseTrips(1); setBaseFare(''); setKpiFare('')
       setBaseStops(''); setSurchargePerStop(''); setSpecialRate(''); setSpecialRateNote('')
       setUpstreamCommission(''); setUpstreamCommission2('')
-      setCommissionMode('single'); setSeasonalNote(''); setIsActive(true); setDisplayOrder('')
+      setCommissionMode('single'); setSeasonalNote(''); setIsActive(true); setIsServiceDefault(false); setDisplayOrder('')
     }
   }
 
@@ -99,6 +101,7 @@ export default function RateRuleFormModal({ vendors, mode, initial, trigger }: P
       commission_mode:       commissionMode,
       seasonal_note:         seasonalNote.trim() || null,
       is_active:             isActive,
+      is_service_default:    isServiceDefault,
       display_order:         numOrNull(displayOrder),
     }
     setSaving(true)
@@ -314,6 +317,11 @@ export default function RateRuleFormModal({ vendors, mode, initial, trigger }: P
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
               <span style={{ fontSize: 13 }}>啟用此規則</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={isServiceDefault} onChange={e => setIsServiceDefault(e.target.checked)} />
+              <span style={{ fontSize: 13 }}>設為此業務的預設規則（LINE 文字快速回報用，同一業務只能勾選 1 筆）</span>
             </label>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>

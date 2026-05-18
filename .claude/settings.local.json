@@ -49,7 +49,9 @@
       "Bash(sed -i \"/{ section: '系統管理', roles: \\\\['admin'\\\\], items: \\\\[/,/^  \\\\]},/d\" src/components/Sidebar.tsx)",
       "Bash(xargs grep -l -i \"DriverFormModal\\\\|DriverRowActions\")",
       "Bash(sed -i \"s|revalidatePath\\('/people'\\)|revalidatePath\\('/people/drivers'\\)|g\" 'D:\\\\Projects\\\\yulang-erp\\\\src\\\\app\\\\\\(dashboard\\)\\\\drivers\\\\actions.ts')",
-      "Bash(sed -i \"s|revalidatePath\\('/people'\\)|revalidatePath\\('/people/users'\\)|g\" 'D:\\\\Projects\\\\yulang-erp\\\\src\\\\app\\\\\\(dashboard\\)\\\\users\\\\actions.ts')"
+      "Bash(sed -i \"s|revalidatePath\\('/people'\\)|revalidatePath\\('/people/users'\\)|g\" 'D:\\\\Projects\\\\yulang-erp\\\\src\\\\app\\\\\\(dashboard\\)\\\\users\\\\actions.ts')",
+      "Bash(npx eslint *)",
+      "Bash(awk -F',' '{print $2}')"
     ]
   }
 }
