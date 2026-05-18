@@ -21,7 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const roleLabel = roleMap[profile.role]?.label ?? profile.role
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', minWidth: 1100 }}>
       {profile.theme && (
         <style dangerouslySetInnerHTML={{ __html: `
 html[data-accent="custom"]{
@@ -43,9 +43,9 @@ html[data-accent="custom"]{
         userId={profile.id}
         allowedPages={allowedPages}
       />
-      <div style={{ marginLeft: 200, flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ marginLeft: 200, flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Topbar />
-        <main style={{ padding: 24, flex: 1 }}>
+        <main style={{ padding: 24, flex: 1, minWidth: 0 }}>
           {children}
         </main>
       </div>

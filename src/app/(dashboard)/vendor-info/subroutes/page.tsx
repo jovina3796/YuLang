@@ -30,17 +30,8 @@ export default async function SubroutesTabPage({
     return ascending ? cmp : -cmp
   })
 
-  // Group by billing_area for visual readability when sorted by it
-  const grouped: Record<string, typeof sorted> = {}
-  if (sortField === 'billing_area') {
-    sorted.forEach(a => {
-      if (!grouped[a.billing_area]) grouped[a.billing_area] = []
-      grouped[a.billing_area]!.push(a)
-    })
-  }
-
   return (
-    <>
+    <div style={{ maxWidth: 640 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
         <SubrouteImportExport />
         <SubrouteAliasFormModal mode="create" billingAreas={billingAreaOptions} />
@@ -64,40 +55,21 @@ export default async function SubroutesTabPage({
           <tbody>
             {!sorted.length ? (
               <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
-            ) : sortField === 'billing_area' ? (
-              Object.entries(grouped).map(([area, list]) => (
-                list.map((a, i) => (
-                  <tr key={a.alias}>
-                    <td className="name">{a.alias}</td>
-                    <td>
-                      {i === 0 && <span className="badge badge-blue">{area}</span>}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <SubrouteAliasRowActions
-                        row={{ alias: a.alias, billing_area: a.billing_area }}
-                        billingAreas={billingAreaOptions}
-                      />
-                    </td>
-                  </tr>
-                ))
-              )).flat()
-            ) : (
-              sorted.map(a => (
-                <tr key={a.alias}>
-                  <td className="name">{a.alias}</td>
-                  <td><span className="badge badge-blue">{a.billing_area}</span></td>
-                  <td style={{ textAlign: 'right' }}>
-                    <SubrouteAliasRowActions
-                      row={{ alias: a.alias, billing_area: a.billing_area }}
-                      billingAreas={billingAreaOptions}
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
+            ) : sorted.map(a => (
+              <tr key={a.alias}>
+                <td className="name">{a.alias}</td>
+                <td><span className="badge badge-blue">{a.billing_area}</span></td>
+                <td style={{ textAlign: 'right' }}>
+                  <SubrouteAliasRowActions
+                    row={{ alias: a.alias, billing_area: a.billing_area }}
+                    billingAreas={billingAreaOptions}
+                  />
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-    </>
+    </div>
   )
 }
