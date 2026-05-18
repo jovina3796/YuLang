@@ -21,9 +21,9 @@ export default async function PeopleLayout({ children }: { children: React.React
     'drivers'
 
   const tabs = [
-    { key: 'drivers'     as const, label: '司機資料', Icon: Users,        href: '/people/drivers',     hidden: !allowed.has('/people/drivers') },
-    { key: 'users'       as const, label: '登入帳號', Icon: UserCog,      href: '/people/users',       hidden: !allowed.has('/people/users') },
-    { key: 'permissions' as const, label: '權限設定', Icon: ShieldCheck,  href: '/people/permissions', hidden: !allowed.has('/people/permissions') },
+    { key: 'drivers'     as const, label: '司機資料', icon: <Users size={14} strokeWidth={1.8} />,       href: '/people/drivers',     hidden: !allowed.has('/people/drivers') },
+    { key: 'users'       as const, label: '登入帳號', icon: <UserCog size={14} strokeWidth={1.8} />,     href: '/people/users',       hidden: !allowed.has('/people/users') },
+    { key: 'permissions' as const, label: '權限設定', icon: <ShieldCheck size={14} strokeWidth={1.8} />, href: '/people/permissions', hidden: !allowed.has('/people/permissions') },
   ]
 
   return (

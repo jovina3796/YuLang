@@ -1,19 +1,19 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 export type SubNavTabItem<K extends string = string> = {
   key:    K
   label:  string
-  Icon:   LucideIcon
-  href?:  string   // when set, link points here (overrides basePath/paramName)
-  hidden?: boolean // when true, item is omitted from render
+  icon:   ReactNode
+  href?:  string
+  hidden?: boolean
 }
 
 interface Props<K extends string = string> {
-  basePath:  string                // e.g. '/people' (used when item has no href)
-  paramName?: string               // 預設 'tab'
+  basePath:  string
+  paramName?: string
   tabs:      SubNavTabItem<K>[]
   activeTab: K
 }
@@ -25,10 +25,6 @@ export default function SubNavTabs<K extends string = string>({
   const visible = tabs.filter(t => !t.hidden)
   if (visible.length === 0) return null
 
-  // Derive the actually-active tab from the current URL when items use
-  // explicit hrefs. Falls back to the server-provided activeTab when no
-  // href matches (e.g. tabs are query-string driven). Longest matching
-  // href wins so /vendor-info/subroutes beats /vendor-info.
   let resolvedActive: K = activeTab
   let bestMatchLen = -1
   for (const t of visible) {
@@ -48,7 +44,6 @@ export default function SubNavTabs<K extends string = string>({
     }}>
       {visible.map(t => {
         const active = resolvedActive === t.key
-        const Icon = t.Icon
         const href = t.href ?? `${basePath}?${paramName}=${t.key}`
         return (
           <Link
@@ -64,7 +59,7 @@ export default function SubNavTabs<K extends string = string>({
               transition: 'all .15s',
             }}
           >
-            <Icon size={14} strokeWidth={1.8} />
+            {t.icon}
             <span>{t.label}</span>
           </Link>
         )

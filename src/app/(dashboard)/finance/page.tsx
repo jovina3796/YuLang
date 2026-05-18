@@ -12,8 +12,8 @@ import SortableTh from '@/components/SortableTh'
 type TabKey = 'fixed' | 'misc'
 
 const TABS = [
-  { key: 'fixed' as const, label: '固定收支', Icon: ReceiptText },
-  { key: 'misc'  as const, label: '其他收支', Icon: Wallet      },
+  { key: 'fixed' as const, label: '固定收支', icon: <ReceiptText size={14} strokeWidth={1.8} /> },
+  { key: 'misc'  as const, label: '其他收支', icon: <Wallet size={14} strokeWidth={1.8} />      },
 ]
 
 export default async function FinancePage({

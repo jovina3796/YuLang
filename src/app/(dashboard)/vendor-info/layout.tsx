@@ -21,9 +21,9 @@ export default async function VendorInfoLayout({ children }: { children: React.R
     'vendors'
 
   const tabs = [
-    { key: 'vendors'   as const, label: '廠商設定',     Icon: Building2,  href: '/vendor-info/vendors',   hidden: !allowed.has('/vendor-info/vendors') },
-    { key: 'rates'     as const, label: '運費設定',     Icon: Tags,       href: '/vendor-info/rates',     hidden: !allowed.has('/vendor-info/rates') },
-    { key: 'subroutes' as const, label: '配送區域對應', Icon: MapPinned,  href: '/vendor-info/subroutes', hidden: !allowed.has('/vendor-info/subroutes') },
+    { key: 'vendors'   as const, label: '廠商設定',     icon: <Building2 size={14} strokeWidth={1.8} />, href: '/vendor-info/vendors',   hidden: !allowed.has('/vendor-info/vendors') },
+    { key: 'rates'     as const, label: '運費設定',     icon: <Tags size={14} strokeWidth={1.8} />,      href: '/vendor-info/rates',     hidden: !allowed.has('/vendor-info/rates') },
+    { key: 'subroutes' as const, label: '配送區域對應', icon: <MapPinned size={14} strokeWidth={1.8} />, href: '/vendor-info/subroutes', hidden: !allowed.has('/vendor-info/subroutes') },
   ]
 
   return (
