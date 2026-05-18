@@ -96,6 +96,136 @@ export function tripSuccessBubble(s: TripSummary): FlexBubble {
   }
 }
 
+export type TripLine = {
+  vendor:  string
+  service: string
+  area?:   string | null
+  stops?:  number | null
+  fare:    number
+}
+
+export function tripsSuccessBubble(date: string, lines: TripLine[]): FlexBubble {
+  const itemRows: FlexComponent[] = []
+  let total = 0
+  lines.forEach((t, i) => {
+    const head = `${i + 1}. ${t.vendor}`.trim()
+    const detailParts: string[] = [t.service]
+    if (t.area) detailParts.push(t.area)
+    if (t.stops != null) detailParts.push(`${t.stops}點`)
+    const detail = detailParts.join(' · ')
+    itemRows.push({
+      type: 'box',
+      layout: 'horizontal',
+      contents: [
+        {
+          type: 'box',
+          layout: 'vertical',
+          flex: 5,
+          contents: [
+            { type: 'text', text: head, size: 'sm', weight: 'bold', color: '#222222', wrap: true },
+            { type: 'text', text: detail, size: 'xs', color: MUTED, wrap: true },
+          ],
+        },
+        { type: 'text', text: `NT$ ${t.fare.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 3 },
+      ],
+    })
+    total += t.fare
+  })
+
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: `車趟已記錄 ✓ ${lines.length} 筆`, weight: 'bold', size: 'lg', color: GREEN, align: 'center' },
+        { type: 'text', text: date, size: 'sm', color: MUTED, align: 'center', margin: 'sm' },
+        { type: 'separator', margin: 'md', color: BORDER },
+        { type: 'box', layout: 'vertical', margin: 'md', spacing: 'md', contents: itemRows },
+        { type: 'separator', margin: 'md', color: BORDER },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'md',
+          contents: [
+            { type: 'text', text: '合計', size: 'sm', weight: 'bold', color: '#222222', flex: 2 },
+            { type: 'text', text: `NT$ ${total.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
+          ],
+        },
+      ],
+    },
+  }
+}
+
+export function restDayBubble(date: string, driverName: string): FlexBubble {
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '休假已登記 ✓', weight: 'bold', size: 'lg', color: GREEN, align: 'center' },
+        { type: 'separator', margin: 'md', color: BORDER },
+        {
+          type: 'box',
+          layout: 'vertical',
+          margin: 'md',
+          spacing: 'sm',
+          contents: [
+            row('司機', driverName),
+            row('日期', date),
+          ],
+        },
+      ],
+    },
+  }
+}
+
+export function tripParseErrorBubble(originalText: string, reason: string, liffUrl: string | null): FlexBubble {
+  const contents: FlexComponent[] = [
+    { type: 'text', text: '車趟回報解析失敗', weight: 'bold', size: 'md', color: '#C62828', align: 'center' },
+    { type: 'separator', margin: 'md', color: BORDER },
+    { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [
+      row('原因', reason),
+      row('原文', `「${originalText}」`),
+    ] },
+  ]
+  if (liffUrl) {
+    contents.push({ type: 'text', text: '可改用 LIFF 表單回報：', size: 'xs', color: MUTED, margin: 'md' })
+  }
+  const bubble: FlexBubble = {
+    type: 'bubble',
+    size: 'kilo',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '20px',
+      contents,
+    },
+  }
+  if (liffUrl) {
+    bubble.footer = {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '12px',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: GREEN,
+          height: 'md',
+          action: { type: 'uri', label: '開啟車趟表單', uri: liffUrl },
+        },
+      ],
+    }
+  }
+  return bubble
+}
+
 export function tripFormTriggerBubble(liffUrl: string): FlexBubble {
   return {
     type: 'bubble',

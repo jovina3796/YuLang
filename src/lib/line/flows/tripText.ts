@@ -1,6 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/service'
 import { reply, push, textMessage, flexMessage } from '@/lib/line/api'
-import { tripFormTriggerBubble } from '@/lib/line/flex'
+import { tripsSuccessBubble, restDayBubble, tripParseErrorBubble, type TripLine } from '@/lib/line/flex'
 import { resolveVehicleForDriver } from '@/lib/line/vehicleResolve'
 import { calcFare, type FareRule } from '@/lib/fare'
 import {
@@ -121,7 +121,16 @@ export async function handleTripText(
     return
   }
 
-  await reply(replyToken, [textMessage(buildSuccessSummary(parsed.date, resolved))])
+  const lines: TripLine[] = resolved.map(rt => ({
+    vendor:  rt.vendor_label,
+    service: rt.rule.service_type,
+    area:    rt.area,
+    stops:   rt.stops,
+    fare:    rt.fare,
+  }))
+  await reply(replyToken, [
+    flexMessage('車趟已記錄', tripsSuccessBubble(twDateToYmd(parsed.date), lines)),
+  ])
 }
 
 function resolveRule(
@@ -181,29 +190,9 @@ async function handleRest(
       return
     }
   }
-  await reply(replyToken, [textMessage(`✓ 已登記休假\n司機：${driverName}\n日期：${ymd}`)])
-}
-
-function buildSuccessSummary(date: TwDate, trips: ResolvedTrip[]): string {
-  const lines: string[] = []
-  lines.push(`✓ 已記錄 ${trips.length} 筆車趟`)
-  lines.push(`日期：${twDateToYmd(date)}`)
-  lines.push('')
-  let total = 0
-  trips.forEach((t, i) => {
-    const seg: string[] = []
-    seg.push(`${i + 1}.`)
-    if (t.vendor_label) seg.push(t.vendor_label)
-    seg.push(t.rule.service_type)
-    if (t.area)        seg.push(t.area)
-    if (t.stops != null) seg.push(`${t.stops}點`)
-    seg.push(`$${t.fare.toLocaleString()}`)
-    lines.push(seg.join(' '))
-    total += t.fare
-  })
-  lines.push('')
-  lines.push(`合計：$${total.toLocaleString()}`)
-  return lines.join('\n')
+  await reply(replyToken, [
+    flexMessage('休假已登記', restDayBubble(ymd, driverName)),
+  ])
 }
 
 async function replyParseFailure(
@@ -216,11 +205,9 @@ async function replyParseFailure(
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID_TRIP || process.env.NEXT_PUBLIC_LIFF_ID
   const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null
 
-  const messages = [
-    textMessage(`❌ 車趟回報解析失敗\n原因：${reason}\n原文：「${originalText}」\n\n建議改用 LIFF 表單回報。`),
-  ]
-  if (liffUrl) messages.push(flexMessage('車趟回報', tripFormTriggerBubble(liffUrl)))
-  await reply(replyToken, messages)
+  await reply(replyToken, [
+    flexMessage('車趟回報解析失敗', tripParseErrorBubble(originalText, reason, liffUrl)),
+  ])
 
   // Best-effort admin notification (don't block the user reply on this).
   notifyAdminsParseFailure(lineUserId, driverName, originalText, reason).catch(err => {

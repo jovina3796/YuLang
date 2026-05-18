@@ -25,7 +25,7 @@ export type FlexComponent =
   | { type: 'text'; text: string; size?: string; weight?: 'bold' | 'regular'; color?: string; align?: 'start' | 'center' | 'end'; flex?: number; wrap?: boolean; margin?: string }
   | { type: 'separator'; margin?: string; color?: string }
   | { type: 'spacer'; size?: string }
-  | { type: 'box'; layout: 'horizontal' | 'vertical' | 'baseline'; contents: FlexComponent[]; spacing?: string; margin?: string; backgroundColor?: string; paddingAll?: string }
+  | { type: 'box'; layout: 'horizontal' | 'vertical' | 'baseline'; contents: FlexComponent[]; spacing?: string; margin?: string; backgroundColor?: string; paddingAll?: string; flex?: number }
   | { type: 'button'; style: 'primary' | 'secondary' | 'link'; color?: string; height?: 'sm' | 'md'; action: { type: 'uri'; label: string; uri: string } | { type: 'message'; label: string; text: string } }
 
 export type FlexBox = Extract<FlexComponent, { type: 'box' }>
