@@ -32,7 +32,7 @@ const ADMIN_ROLES = ['admin', 'owner']
 
 // Heuristic: any first token that looks like a date keyword belongs to
 // the trip-report flow. Webhook checks this before dispatching.
-const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2}[號日]|\d{1,2}\/\d{1,2})(\s|$)/
+const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2}[號日]?|\d{1,2}\/\d{1,2})(\s|$)/
 
 export function looksLikeTripText(text: string): boolean {
   return DATE_TOKEN_RE.test(text.trim())
