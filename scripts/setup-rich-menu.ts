@@ -53,22 +53,38 @@ const CELLS: Cell[] = [
   { label: '系統',     bg: '#6366F1', fg: '#FFFFFF', action: { type: 'uri', label: '系統', uri: SITE_URL } },
 ]
 
+const CUSTOM_IMAGE_PATH = resolve(process.cwd(), 'img/馭浪圖文選單.png')
+
 function buildSvg(): string {
   const blocks = CELLS.map((c, i) => {
     const x = i * CELL_W
     return `<rect x="${x}" y="0" width="${CELL_W}" height="${CELL_H}" fill="${c.bg}"/>` +
            `<text x="${x + CELL_W / 2}" y="${CELL_H / 2}" font-family="Microsoft JhengHei, PingFang TC, Heiti TC, Noto Sans CJK TC, sans-serif" font-size="180" font-weight="700" fill="${c.fg}" text-anchor="middle" dominant-baseline="central">${c.label}</text>`
   }).join('')
-  // White vertical separators
   const seps = Array.from({ length: COLS - 1 }, (_, i) =>
     `<rect x="${(i + 1) * CELL_W - 2}" y="0" width="4" height="${CELL_H}" fill="rgba(255,255,255,0.18)"/>`
   ).join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">${blocks}${seps}</svg>`
 }
 
-async function generatePng(): Promise<Buffer> {
-  const svg = Buffer.from(buildSvg())
-  return sharp(svg).png({ compressionLevel: 9 }).toBuffer()
+async function loadPng(): Promise<Buffer> {
+  try {
+    const buf = readFileSync(CUSTOM_IMAGE_PATH)
+    // Validate size matches the menu's declared dimensions.
+    const meta = await sharp(buf).metadata()
+    if (meta.width !== WIDTH || meta.height !== HEIGHT) {
+      throw new Error(`custom image ${meta.width}x${meta.height} != ${WIDTH}x${HEIGHT}`)
+    }
+    console.log(`Using custom design: ${CUSTOM_IMAGE_PATH}`)
+    // Ensure output is PNG even if source is something else.
+    return meta.format === 'png' ? buf : sharp(buf).png({ compressionLevel: 9 }).toBuffer()
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      console.log('Custom image not found, generating placeholder PNG via sharp...')
+      return sharp(Buffer.from(buildSvg())).png({ compressionLevel: 9 }).toBuffer()
+    }
+    throw e
+  }
 }
 
 async function main(): Promise<void> {
@@ -77,8 +93,8 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  console.log('Generating rich menu PNG...')
-  const png = await generatePng()
+  console.log('Loading rich menu PNG...')
+  const png = await loadPng()
   console.log(`PNG ready, ${png.byteLength} bytes`)
 
   // Remove previous default menu so we don't accumulate stale menus.
