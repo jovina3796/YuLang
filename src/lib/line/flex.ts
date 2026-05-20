@@ -185,6 +185,104 @@ export function restDayBubble(date: string, driverName: string): FlexBubble {
   }
 }
 
+export type TripDayGroup =
+  | { kind: 'trips'; date: string; lines: TripLine[] }
+  | { kind: 'rest';  date: string }
+
+export function tripsMultiDayBubble(driverNote: string, groups: TripDayGroup[]): FlexBubble {
+  const blocks: FlexComponent[] = []
+  let grandTotal = 0
+  let tripCount = 0
+  let restCount = 0
+
+  groups.forEach((g, gi) => {
+    if (gi > 0) blocks.push({ type: 'separator', margin: 'md', color: BORDER })
+    if (g.kind === 'rest') {
+      restCount += 1
+      blocks.push({
+        type: 'box',
+        layout: 'horizontal',
+        margin: 'md',
+        contents: [
+          { type: 'text', text: g.date, size: 'sm', weight: 'bold', color: '#222222', flex: 4 },
+          { type: 'text', text: '休假', size: 'sm', color: GREEN, align: 'end', flex: 3 },
+        ],
+      })
+      return
+    }
+    let daySubtotal = 0
+    const dayItems: FlexComponent[] = []
+    g.lines.forEach((t, i) => {
+      const head = `${i + 1}. ${t.vendor}`.trim()
+      const detailParts: string[] = [t.service]
+      if (t.area) detailParts.push(t.area)
+      if (t.stops != null) detailParts.push(`${t.stops}點`)
+      const detail = detailParts.join(' · ')
+      dayItems.push({
+        type: 'box',
+        layout: 'horizontal',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            flex: 5,
+            contents: [
+              { type: 'text', text: head, size: 'sm', weight: 'bold', color: '#222222', wrap: true },
+              { type: 'text', text: detail, size: 'xs', color: MUTED, wrap: true },
+            ],
+          },
+          { type: 'text', text: `NT$ ${t.fare.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 3 },
+        ],
+      })
+      daySubtotal += t.fare
+      tripCount += 1
+    })
+    grandTotal += daySubtotal
+    blocks.push({
+      type: 'box',
+      layout: 'horizontal',
+      margin: 'md',
+      contents: [
+        { type: 'text', text: g.date, size: 'sm', weight: 'bold', color: '#222222', flex: 4 },
+        { type: 'text', text: `${g.lines.length} 筆 · NT$ ${daySubtotal.toLocaleString()}`, size: 'xs', color: MUTED, align: 'end', flex: 5 },
+      ],
+    })
+    blocks.push({ type: 'box', layout: 'vertical', margin: 'sm', spacing: 'md', contents: dayItems })
+  })
+
+  const headerParts: string[] = []
+  if (tripCount > 0) headerParts.push(`${tripCount} 筆車趟`)
+  if (restCount > 0) headerParts.push(`${restCount} 日休假`)
+  const headerText = `已記錄 ✓ ${headerParts.join(' · ')}`
+
+  const body: FlexComponent[] = [
+    { type: 'text', text: headerText, weight: 'bold', size: 'lg', color: GREEN, align: 'center' },
+  ]
+  if (driverNote) {
+    body.push({ type: 'text', text: driverNote, size: 'xs', color: MUTED, align: 'center', margin: 'sm' })
+  }
+  body.push({ type: 'separator', margin: 'md', color: BORDER })
+  body.push(...blocks)
+  if (grandTotal > 0) {
+    body.push({ type: 'separator', margin: 'md', color: BORDER })
+    body.push({
+      type: 'box',
+      layout: 'horizontal',
+      margin: 'md',
+      contents: [
+        { type: 'text', text: '總計', size: 'sm', weight: 'bold', color: '#222222', flex: 2 },
+        { type: 'text', text: `NT$ ${grandTotal.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
+      ],
+    })
+  }
+
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body },
+  }
+}
+
 export function tripParseErrorBubble(originalText: string, reason: string, liffUrl: string | null): FlexBubble {
   const contents: FlexComponent[] = [
     { type: 'text', text: '車趟回報解析失敗', weight: 'bold', size: 'md', color: '#C62828', align: 'center' },

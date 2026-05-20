@@ -1,6 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/service'
 import { reply, push, textMessage, flexMessage } from '@/lib/line/api'
-import { tripsSuccessBubble, restDayBubble, tripParseErrorBubble, type TripLine } from '@/lib/line/flex'
+import { tripsSuccessBubble, restDayBubble, tripsMultiDayBubble, tripParseErrorBubble, type TripLine, type TripDayGroup } from '@/lib/line/flex'
 import { resolveVehicleForDriver } from '@/lib/line/vehicleResolve'
 import { isAdminLineUser, findDriverByName } from '@/lib/line/flows/bind'
 import { calcFare, type FareRule } from '@/lib/fare'
@@ -109,24 +109,34 @@ export async function handleTripText(
     return
   }
 
-  if (parsed.kind === 'rest') {
-    await handleRest(actingDriverId, actingDriverName, parsed.date, replyToken)
-    return
-  }
+  // Resolve all trip days first (all-or-nothing); collect rows for batch insert.
+  type ResolvedDay =
+    | { kind: 'rest';  date: TwDate }
+    | { kind: 'trips'; date: TwDate; resolved: ResolvedTrip[] }
 
-  // Resolve every parsed trip → rate_rule + fare
-  const resolved: ResolvedTrip[] = []
+  const resolvedDays: ResolvedDay[] = []
   const errors: string[] = []
-  for (const t of parsed.trips) {
-    const r = resolveRule(t, rules, aliasMap)
-    if ('error' in r) { errors.push(r.error); continue }
-    const stops = t.stops ?? 0
-    const isKpi = r.rule.pricing_mode === 'base_or_kpi' ? true : false
-    const fare = calcFare(r.rule, 1, stops, isKpi, false)
-    const vRaw = (r.rule as unknown as { vendors: { name: string; warehouse: string | null } | { name: string; warehouse: string | null }[] | null }).vendors
-    const v = Array.isArray(vRaw) ? vRaw[0] ?? null : vRaw
-    const vendorLabel = v ? `${v.name}${v.warehouse ? `／${v.warehouse}` : ''}` : ''
-    resolved.push({ rule: r.rule, area: t.area, stops: t.stops, fare, vendor_label: vendorLabel })
+  for (const day of parsed.days) {
+    if (day.kind === 'rest') {
+      resolvedDays.push({ kind: 'rest', date: day.date })
+      continue
+    }
+    const dayResolved: ResolvedTrip[] = []
+    for (const t of day.trips) {
+      const r = resolveRule(t, rules, aliasMap)
+      if ('error' in r) {
+        errors.push(`${twDateToYmd(day.date)}：${r.error}`)
+        continue
+      }
+      const stops = t.stops ?? 0
+      const isKpi = r.rule.pricing_mode === 'base_or_kpi' ? true : false
+      const fare = calcFare(r.rule, 1, stops, isKpi, false)
+      const vRaw = (r.rule as unknown as { vendors: { name: string; warehouse: string | null } | { name: string; warehouse: string | null }[] | null }).vendors
+      const v = Array.isArray(vRaw) ? vRaw[0] ?? null : vRaw
+      const vendorLabel = v ? `${v.name}${v.warehouse ? `／${v.warehouse}` : ''}` : ''
+      dayResolved.push({ rule: r.rule, area: t.area, stops: t.stops, fare, vendor_label: vendorLabel })
+    }
+    resolvedDays.push({ kind: 'trips', date: day.date, resolved: dayResolved })
   }
 
   if (errors.length > 0) {
@@ -134,44 +144,109 @@ export async function handleTripText(
     return
   }
 
-  const vehicleId = await resolveVehicleForDriver(actingDriverId, new Date(twDateToIso(parsed.date)))
-  const departedIso = twDateToIso(parsed.date)
+  // Build trip rows (resolve vehicle per date — different days may use different vehicles).
+  const tripRows: Array<Record<string, unknown>> = []
+  for (const day of resolvedDays) {
+    if (day.kind !== 'trips' || day.resolved.length === 0) continue
+    const departedIso = twDateToIso(day.date)
+    const vehicleId = await resolveVehicleForDriver(actingDriverId, new Date(departedIso))
+    for (const rt of day.resolved) {
+      tripRows.push({
+        vendor_id:        rt.rule.vendor_id,
+        rate_rule_id:     rt.rule.id,
+        driver_id:        actingDriverId,
+        vehicle_id:       vehicleId,
+        destination_area: rt.area,
+        departed_at:      departedIso,
+        actual_stops:     rt.stops,
+        is_kpi_achieved:  rt.rule.pricing_mode === 'base_or_kpi' ? true : null,
+        is_special:       false,
+        calculated_fare:  rt.fare,
+        final_fare:       rt.fare,
+        trip_count:       1,
+        notes:            null as string | null,
+        status:           'completed',
+      })
+    }
+  }
 
-  const rows = resolved.map(rt => ({
-    vendor_id:        rt.rule.vendor_id,
-    rate_rule_id:     rt.rule.id,
-    driver_id:        actingDriverId,
-    vehicle_id:       vehicleId,
-    destination_area: rt.area,
-    departed_at:      departedIso,
-    actual_stops:     rt.stops,
-    is_kpi_achieved:  rt.rule.pricing_mode === 'base_or_kpi' ? true : null,
-    is_special:       false,
-    calculated_fare:  rt.fare,
-    final_fare:       rt.fare,
-    trip_count:       1,
-    notes:            null as string | null,
-    status:           'completed',
-  }))
+  if (tripRows.length > 0) {
+    const { error: insErr } = await supabase.from('trips').insert(tripRows)
+    if (insErr) {
+      console.error('[line.tripText] insert failed', insErr)
+      await reply(replyToken, [textMessage(`寫入失敗：${insErr.message}`)])
+      return
+    }
+  }
 
-  const { error: insErr } = await supabase.from('trips').insert(rows)
-  if (insErr) {
-    console.error('[line.tripText] insert failed', insErr)
-    await reply(replyToken, [textMessage(`寫入失敗：${insErr.message}`)])
+  // Insert rest schedules (skip those already marked rest).
+  for (const day of resolvedDays) {
+    if (day.kind !== 'rest') continue
+    await insertRestIfMissing(actingDriverId, day.date)
+  }
+
+  // Build reply card.
+  const driverNote = actingDriverId !== driverId ? `代 ${actingDriverName} 回報` : ''
+
+  if (resolvedDays.length === 1) {
+    const only = resolvedDays[0]
+    if (only.kind === 'rest') {
+      await reply(replyToken, [
+        flexMessage('休假已登記', restDayBubble(twDateToYmd(only.date), actingDriverName + (driverNote ? `（${driverNote}）` : ''))),
+      ])
+      return
+    }
+    const lines: TripLine[] = only.resolved.map(rt => ({
+      vendor:  rt.vendor_label,
+      service: rt.rule.service_type,
+      area:    rt.area,
+      stops:   rt.stops,
+      fare:    rt.fare,
+    }))
+    const dateLabel = twDateToYmd(only.date) + (driverNote ? `（${driverNote}）` : '')
+    await reply(replyToken, [
+      flexMessage('車趟已記錄', tripsSuccessBubble(dateLabel, lines)),
+    ])
     return
   }
 
-  const lines: TripLine[] = resolved.map(rt => ({
-    vendor:  rt.vendor_label,
-    service: rt.rule.service_type,
-    area:    rt.area,
-    stops:   rt.stops,
-    fare:    rt.fare,
-  }))
-  const headerNote = actingDriverId !== driverId ? `（代 ${actingDriverName} 回報）` : ''
+  const groups: TripDayGroup[] = resolvedDays.map(d => {
+    if (d.kind === 'rest') return { kind: 'rest', date: twDateToYmd(d.date) }
+    const lines: TripLine[] = d.resolved.map(rt => ({
+      vendor:  rt.vendor_label,
+      service: rt.rule.service_type,
+      area:    rt.area,
+      stops:   rt.stops,
+      fare:    rt.fare,
+    }))
+    return { kind: 'trips', date: twDateToYmd(d.date), lines }
+  })
   await reply(replyToken, [
-    flexMessage('車趟已記錄', tripsSuccessBubble(twDateToYmd(parsed.date) + headerNote, lines)),
+    flexMessage('車趟已記錄', tripsMultiDayBubble(driverNote, groups)),
   ])
+}
+
+async function insertRestIfMissing(driverId: string, date: TwDate): Promise<void> {
+  const supabase = createServiceClient()
+  const ymd = twDateToYmd(date)
+  const { data: existing } = await supabase
+    .from('schedules')
+    .select('id, shift')
+    .eq('driver_id', driverId)
+    .eq('scheduled_date', ymd)
+  const restRow = (existing ?? []).find(r => (r.shift ?? '').includes('休'))
+  if (restRow) return
+  const { error } = await supabase.from('schedules').insert({
+    driver_id:      driverId,
+    vehicle_id:     null,
+    scheduled_date: ymd,
+    shift:          '休',
+    status:         'scheduled',
+  })
+  if (error) {
+    console.error('[line.tripText] rest insert failed', error)
+    throw error
+  }
 }
 
 function resolveRule(
@@ -200,40 +275,6 @@ function resolveRule(
   if (def) return { rule: def }
   if (matchedSvc.length === 1) return { rule: matchedSvc[0] }
   return { error: `業務「${trip.service}」有多個費率規則，請在後台勾選「設為此業務的預設規則」` }
-}
-
-async function handleRest(
-  driverId: string,
-  driverName: string,
-  date: TwDate,
-  replyToken: string,
-): Promise<void> {
-  const supabase = createServiceClient()
-  const ymd = twDateToYmd(date)
-  const { data: existing } = await supabase
-    .from('schedules')
-    .select('id, shift')
-    .eq('driver_id', driverId)
-    .eq('scheduled_date', ymd)
-
-  const restRow = (existing ?? []).find(r => (r.shift ?? '').includes('休'))
-  if (!restRow) {
-    const { error } = await supabase.from('schedules').insert({
-      driver_id:      driverId,
-      vehicle_id:     null,
-      scheduled_date: ymd,
-      shift:          '休',
-      status:         'scheduled',
-    })
-    if (error) {
-      console.error('[line.tripText] rest insert failed', error)
-      await reply(replyToken, [textMessage(`寫入休假失敗：${error.message}`)])
-      return
-    }
-  }
-  await reply(replyToken, [
-    flexMessage('休假已登記', restDayBubble(ymd, driverName)),
-  ])
 }
 
 async function replyParseFailure(

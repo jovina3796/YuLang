@@ -6,7 +6,11 @@
 //   "5/12 冷鏈淡水 冷鏈三重8"      → 2 trips on May 12
 //   "4號 休息"                      → rest day
 //
-// Format:
+// Multi-day (single LINE message): segments separated by newline OR ; OR ；
+//   "2號 低鮮 冷鏈永和10\n3號 低鮮5"
+//   "2號 低鮮；3號 休息；5/12 冷鏈淡水"
+//
+// Format (per segment):
 //   <date-token> <trip-token>+
 //   OR
 //   <date-token> 休息
@@ -31,12 +35,16 @@ export type ParsedTrip = {
   stops:   number | null
 }
 
-export type ParseResult =
+export type ParsedDay =
   | { kind: 'rest'; date: TwDate }
   | { kind: 'trips'; date: TwDate; trips: ParsedTrip[] }
+
+export type ParseResult =
+  | { kind: 'days'; days: ParsedDay[] }
   | { kind: 'error'; message: string }
 
 const REST_TOKENS = new Set(['休', '休息', '休假'])
+const SEGMENT_SEP_RE = /[\r\n;；]+/
 
 function nowTW(): Date {
   return new Date(Date.now() + 8 * 60 * 60 * 1000)
@@ -103,28 +111,41 @@ function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: 
 }
 
 export function parseTripText(text: string, services: string[]): ParseResult {
-  const tokens = text.trim().split(/\s+/).filter(Boolean)
-  if (tokens.length < 2) {
-    return { kind: 'error', message: '訊息過短，需要：日期 + 至少一筆車趟（或「休息」）' }
+  const segments = text.split(SEGMENT_SEP_RE).map(s => s.trim()).filter(Boolean)
+  if (segments.length === 0) {
+    return { kind: 'error', message: '訊息為空' }
   }
-  const date = parseDateToken(tokens[0])
-  if (!date) {
-    return { kind: 'error', message: `日期格式錯誤：「${tokens[0]}」（可用 今天 / N號 / M月N日 / M/N）` }
-  }
-  const rest = tokens.slice(1)
-  if (rest.some(t => REST_TOKENS.has(t))) {
-    if (rest.length !== 1) {
-      return { kind: 'error', message: '「休息」需單獨出現，無法與車趟混用' }
+
+  const days: ParsedDay[] = []
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    const tokens = seg.split(/\s+/).filter(Boolean)
+    const prefix = segments.length > 1 ? `第 ${i + 1} 段「${seg}」：` : ''
+    if (tokens.length < 2) {
+      return { kind: 'error', message: `${prefix}訊息過短，需要：日期 + 至少一筆車趟（或「休息」）` }
     }
-    return { kind: 'rest', date }
+    const date = parseDateToken(tokens[0])
+    if (!date) {
+      return { kind: 'error', message: `${prefix}日期格式錯誤：「${tokens[0]}」（可用 今天 / N號 / M月N日 / M/N）` }
+    }
+    const rest = tokens.slice(1)
+    if (rest.some(t => REST_TOKENS.has(t))) {
+      if (rest.length !== 1) {
+        return { kind: 'error', message: `${prefix}「休息」需單獨出現，無法與車趟混用` }
+      }
+      days.push({ kind: 'rest', date })
+      continue
+    }
+    const trips: ParsedTrip[] = []
+    for (const t of rest) {
+      const p = parseTripToken(t, services)
+      if ('error' in p) return { kind: 'error', message: `${prefix}${p.error}` }
+      trips.push(p)
+    }
+    days.push({ kind: 'trips', date, trips })
   }
-  const trips: ParsedTrip[] = []
-  for (const t of rest) {
-    const p = parseTripToken(t, services)
-    if ('error' in p) return { kind: 'error', message: p.error }
-    trips.push(p)
-  }
-  return { kind: 'trips', date, trips }
+
+  return { kind: 'days', days }
 }
 
 // Helpers exposed for the orchestration layer.
