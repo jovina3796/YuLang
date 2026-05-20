@@ -31,20 +31,25 @@ export default function TripDateFilter({ vendors }: { vendors: Vendor[] }) {
     router.push(qs ? `${pathname}?${qs}` : pathname)
   }
 
+  function ymdTaipei(d: Date): string {
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
+  }
+
   function quickRange(days: number) {
     const end   = new Date()
     const start = new Date()
     start.setDate(end.getDate() - (days - 1))
-    const f = start.toISOString().split('T')[0]
-    const t = end.toISOString().split('T')[0]
+    const f = ymdTaipei(start)
+    const t = ymdTaipei(end)
     setFrom(f); setTo(t); apply({ from: f, to: t })
   }
 
   function thisMonth() {
     const now = new Date()
-    const f = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const t = now.toISOString().split('T')[0]
-    setFrom(f); setTo(t); apply({ from: f, to: t })
+    const f = new Date(now.getFullYear(), now.getMonth(), 1, 12, 0, 0)
+    const fStr = ymdTaipei(f)
+    const tStr = ymdTaipei(now)
+    setFrom(fStr); setTo(tStr); apply({ from: fStr, to: tStr })
   }
 
   function clear() {
