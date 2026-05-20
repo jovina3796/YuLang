@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { reply, push, textMessage, flexMessage } from '@/lib/line/api'
 import { tripsSuccessBubble, restDayBubble, tripParseErrorBubble, type TripLine } from '@/lib/line/flex'
 import { resolveVehicleForDriver } from '@/lib/line/vehicleResolve'
+import { isAdminLineUser, findDriverByName } from '@/lib/line/flows/bind'
 import { calcFare, type FareRule } from '@/lib/fare'
 import {
   parseTripText,
@@ -34,8 +35,27 @@ const ADMIN_ROLES = ['admin', 'owner']
 // the trip-report flow. Webhook checks this before dispatching.
 const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2}[號日]?|\d{1,2}\/\d{1,2})(\s|$)/
 
+// Admin-only override prefix/suffix: 指定司機：XXX  or  指定司機:XXX
+// Allowed at the start (followed by whitespace) or end (preceded by whitespace) of the message.
+const ASSIGN_DRIVER_HEAD_RE = /^指定司機[：:]\s*(\S+)\s+/
+const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
+
 export function looksLikeTripText(text: string): boolean {
-  return DATE_TOKEN_RE.test(text.trim())
+  const stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
+  return DATE_TOKEN_RE.test(stripped)
+}
+
+function extractAssignedDriver(text: string): { name: string; remaining: string } | null {
+  const t = text.trim()
+  const head = t.match(ASSIGN_DRIVER_HEAD_RE)
+  if (head) {
+    return { name: head[1], remaining: t.slice(head[0].length).trim() }
+  }
+  const tail = t.match(ASSIGN_DRIVER_TAIL_RE)
+  if (tail) {
+    return { name: tail[1], remaining: t.slice(0, tail.index).trim() }
+  }
+  return null
 }
 
 export async function handleTripText(
@@ -46,6 +66,26 @@ export async function handleTripText(
   text: string,
 ): Promise<void> {
   const supabase = createServiceClient()
+
+  // Admin-only: "指定司機：XXX" at start or end overrides the acting driver.
+  let actingDriverId = driverId
+  let actingDriverName = driverName
+  let parseText = text
+  const assigned = extractAssignedDriver(text)
+  if (assigned) {
+    if (!(await isAdminLineUser(lineUserId))) {
+      await reply(replyToken, [textMessage('「指定司機」僅限管理員使用。')])
+      return
+    }
+    const target = await findDriverByName(assigned.name)
+    if (!target) {
+      await reply(replyToken, [textMessage(`找不到司機「${assigned.name}」（需為啟用中且姓名完全相符）。`)])
+      return
+    }
+    actingDriverId = target.id
+    actingDriverName = target.name
+    parseText = assigned.remaining
+  }
 
   const [{ data: rulesRaw }, { data: aliasesRaw }] = await Promise.all([
     supabase
@@ -62,15 +102,15 @@ export async function handleTripText(
   }
   const services = Array.from(new Set(rules.map(r => r.service_type).filter(Boolean)))
 
-  const parsed = parseTripText(text, services)
+  const parsed = parseTripText(parseText, services)
 
   if (parsed.kind === 'error') {
-    await replyParseFailure(lineUserId, replyToken, text, parsed.message, driverName)
+    await replyParseFailure(lineUserId, replyToken, text, parsed.message, actingDriverName)
     return
   }
 
   if (parsed.kind === 'rest') {
-    await handleRest(driverId, driverName, parsed.date, replyToken)
+    await handleRest(actingDriverId, actingDriverName, parsed.date, replyToken)
     return
   }
 
@@ -90,17 +130,17 @@ export async function handleTripText(
   }
 
   if (errors.length > 0) {
-    await replyParseFailure(lineUserId, replyToken, text, errors.join('；'), driverName)
+    await replyParseFailure(lineUserId, replyToken, text, errors.join('；'), actingDriverName)
     return
   }
 
-  const vehicleId = await resolveVehicleForDriver(driverId, new Date(twDateToIso(parsed.date)))
+  const vehicleId = await resolveVehicleForDriver(actingDriverId, new Date(twDateToIso(parsed.date)))
   const departedIso = twDateToIso(parsed.date)
 
   const rows = resolved.map(rt => ({
     vendor_id:        rt.rule.vendor_id,
     rate_rule_id:     rt.rule.id,
-    driver_id:        driverId,
+    driver_id:        actingDriverId,
     vehicle_id:       vehicleId,
     destination_area: rt.area,
     departed_at:      departedIso,
@@ -128,8 +168,9 @@ export async function handleTripText(
     stops:   rt.stops,
     fare:    rt.fare,
   }))
+  const headerNote = actingDriverId !== driverId ? `（代 ${actingDriverName} 回報）` : ''
   await reply(replyToken, [
-    flexMessage('車趟已記錄', tripsSuccessBubble(twDateToYmd(parsed.date), lines)),
+    flexMessage('車趟已記錄', tripsSuccessBubble(twDateToYmd(parsed.date) + headerNote, lines)),
   ])
 }
 

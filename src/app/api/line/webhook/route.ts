@@ -107,6 +107,12 @@ async function handleEvent(event: LineEvent): Promise<void> {
     const text = msg.type === 'text' ? msg.text.trim() : null
     const imageId = msg.type === 'image' ? msg.id : null
 
+    // 「/回報」：顯示快速回報指令說明（顯式請求才提示）
+    if (text === '/回報') {
+      await reply(replyToken, [textMessage(MENU_HINT)])
+      return
+    }
+
     // 「加油」開頭一律當新指令（含逐步引導與快速回報），不論目前 session 狀態
     if (text && /^加油(\s|$)/.test(text)) {
       await handleFuelEntry(driver.id, userId, replyToken, text)
@@ -131,20 +137,16 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    if (session.state === 'idle') {
-      await reply(replyToken, [textMessage(MENU_HINT)])
-      return
-    }
-
     // 進行中：加油流程
     if (session.state.startsWith('fuel:')) {
       await handleFuel(session, replyToken, text, imageId)
       return
     }
 
-    // 未知狀態 → 重置
-    await resetSession(userId)
-    await reply(replyToken, [textMessage(`流程已重置。\n${MENU_HINT}`)])
+    // idle 或無法辨識的狀態：保持沉默（讓人工客服可以正常回覆）
+    if (session.state !== 'idle') {
+      await resetSession(userId)
+    }
   } catch (err) {
     console.error('[line.webhook] handler error', err)
   }

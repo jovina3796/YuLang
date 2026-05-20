@@ -2,7 +2,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { reply, textMessage } from '@/lib/line/api'
 import { resetSession, saveSession } from '@/lib/line/session'
 
-export const MENU_HINT = '可用指令：\n• 加油回報：輸入「加油」開啟表單，或快速：加油 [里程] [付款] [金額]\n• 車趟回報：\n  - 表單：輸入「車趟」\n  - 快速：日期 + 車趟（例：2號 低鮮 冷鏈永和10）\n  - 休假：日期 休息（例：4號 休息）\n• 維修保養：輸入「維修」或「保養」開啟表單（可上傳單據，AI 自動辨識）'
+export const MENU_HINT = '可用指令：\n• 加油回報：輸入「加油」開啟表單，或快速：加油 [里程] [付款] [金額]\n• 車趟回報：\n  - 表單：輸入「車趟」\n  - 快速：日期 + 車趟（例：2號 低鮮 冷鏈永和10）\n  - 休假：日期 休息（例：4號 休息）\n  - 管理員代填：開頭或結尾加上「指定司機：王小明」\n• 維修保養：輸入「維修」或「保養」開啟表單（可上傳單據，AI 自動辨識）\n（隨時輸入「/回報」可再次顯示此說明）'
 
 export async function findDriverByLineUserId(lineUserId: string): Promise<{ id: string; name: string } | null> {
   const supabase = createServiceClient()
@@ -12,6 +12,28 @@ export async function findDriverByLineUserId(lineUserId: string): Promise<{ id: 
     .eq('line_user_id', lineUserId)
     .maybeSingle()
   return data ?? null
+}
+
+export async function isAdminLineUser(lineUserId: string): Promise<boolean> {
+  const supabase = createServiceClient()
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('line_user_id', lineUserId)
+    .maybeSingle()
+  return !!data && (data.role === 'admin' || data.role === 'owner')
+}
+
+export async function findDriverByName(name: string): Promise<{ id: string; name: string } | null> {
+  const supabase = createServiceClient()
+  const { data } = await supabase
+    .from('drivers')
+    .select('id, name, status')
+    .eq('name', name)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (!data) return null
+  return { id: data.id, name: data.name }
 }
 
 export async function startBinding(lineUserId: string, replyToken: string): Promise<void> {
