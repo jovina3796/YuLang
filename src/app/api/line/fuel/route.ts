@@ -121,7 +121,7 @@ export async function POST(request: Request): Promise<Response> {
   // Push a card-style ack back into the LINE chat.
   await push(profile.userId, [
     flexMessage('加油資料已記錄', fuelSuccessBubble({
-      date:    loggedAt,
+      date:    new Date(loggedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
       plate:   '',
       mileage,
       total:   Math.round(total),

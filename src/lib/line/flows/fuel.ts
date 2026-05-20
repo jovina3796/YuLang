@@ -128,7 +128,7 @@ export async function handleFuelEntry(driverId: string, lineUserId: string, repl
   await resetSession(lineUserId)
   await reply(replyToken, [
     flexMessage('加油資料已記錄', fuelSuccessBubble({
-      date:    loggedAtIso.slice(0, 10),
+      date:    new Date(loggedAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
       plate:   v?.plate_number ?? '',
       mileage,
       total,
@@ -368,7 +368,7 @@ async function finalize(lineUserId: string, replyToken: string, payload: Session
   await resetSession(lineUserId)
   await reply(replyToken, [
     flexMessage('加油資料已記錄', fuelSuccessBubble({
-      date:    payload.logged_at.slice(0, 10),
+      date:    new Date(payload.logged_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
       plate:   '',
       mileage: payload.mileage_at_refuel ?? null,
       total:   payload.total_cost,
