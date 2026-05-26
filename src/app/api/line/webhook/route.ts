@@ -4,6 +4,7 @@ import { findDriverByLineUserId, handleBindingInput, startBinding, MENU_HINT } f
 import { handleFuel, handleFuelEntry } from '@/lib/line/flows/fuel'
 import { startTrip } from '@/lib/line/flows/trip'
 import { handleTripText, looksLikeTripText } from '@/lib/line/flows/tripText'
+import { handleQueryText, looksLikeQueryText } from '@/lib/line/flows/query'
 import { startMaintenance } from '@/lib/line/flows/maintenance'
 import { loadSession, resetSession } from '@/lib/line/session'
 import { reply, textMessage } from '@/lib/line/api'
@@ -128,6 +129,12 @@ async function handleEvent(event: LineEvent): Promise<void> {
     // 「維修」/「保養」開頭：以 LIFF 表單 + AI 辨識回報
     if (text && /^(維修|保養)(\s|$)/.test(text)) {
       await startMaintenance(userId, replyToken)
+      return
+    }
+
+    // 「查詢」/「本月車趟」：回覆當月車趟統計
+    if (text && looksLikeQueryText(text)) {
+      await handleQueryText(driver.id, driver.name, userId, replyToken, text)
       return
     }
 

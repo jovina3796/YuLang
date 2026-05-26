@@ -391,6 +391,82 @@ export function maintenanceFormTriggerBubble(liffUrl: string): FlexBubble {
   }
 }
 
+export type ServiceSummaryLine = {
+  service: string
+  trips:   number
+}
+
+export function tripsMonthlyQueryBubble(opts: {
+  driverName:   string
+  rangeLabel:   string   // 例：2026-05 / 2026-04 / 近 7 天
+  totalTrips:   number
+  totalFare:    number
+  restDays:     number
+  byService:    ServiceSummaryLine[]
+  driverNote?:  string   // 例：代查
+}): FlexBubble {
+  const { driverName, rangeLabel, totalTrips, totalFare, restDays, byService, driverNote } = opts
+
+  const itemRows: FlexComponent[] = byService.map(s => ({
+    type: 'box',
+    layout: 'horizontal',
+    contents: [
+      { type: 'text', text: s.service, size: 'sm', color: '#222222', flex: 5, wrap: true },
+      { type: 'text', text: `${s.trips} 趟`, size: 'sm', color: GREEN, align: 'end', flex: 3 },
+    ],
+  }))
+
+  const body: FlexComponent[] = [
+    { type: 'text', text: `${driverName} ・ ${rangeLabel}`, weight: 'bold', size: 'lg', color: '#222222', align: 'center' },
+  ]
+  if (driverNote) {
+    body.push({ type: 'text', text: driverNote, size: 'xs', color: MUTED, align: 'center', margin: 'sm' })
+  }
+  body.push({ type: 'separator', margin: 'md', color: BORDER })
+
+  if (itemRows.length === 0) {
+    body.push({ type: 'text', text: '此區間無車趟紀錄', size: 'sm', color: MUTED, align: 'center', margin: 'md' })
+  } else {
+    body.push({ type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: itemRows })
+  }
+
+  body.push({ type: 'separator', margin: 'md', color: BORDER })
+  body.push({
+    type: 'box',
+    layout: 'horizontal',
+    margin: 'md',
+    contents: [
+      { type: 'text', text: '總趟數', size: 'sm', color: MUTED, flex: 2 },
+      { type: 'text', text: `${totalTrips} 趟`, size: 'sm', color: '#222222', align: 'end', flex: 5 },
+    ],
+  })
+  if (restDays > 0) {
+    body.push({
+      type: 'box',
+      layout: 'horizontal',
+      contents: [
+        { type: 'text', text: '休假', size: 'sm', color: MUTED, flex: 2 },
+        { type: 'text', text: `${restDays} 日`, size: 'sm', color: '#222222', align: 'end', flex: 5 },
+      ],
+    })
+  }
+  body.push({
+    type: 'box',
+    layout: 'horizontal',
+    margin: 'sm',
+    contents: [
+      { type: 'text', text: '運費結算', size: 'sm', weight: 'bold', color: '#222222', flex: 2 },
+      { type: 'text', text: `NT$ ${totalFare.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
+    ],
+  })
+
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body },
+  }
+}
+
 export function tripFormTriggerBubble(liffUrl: string): FlexBubble {
   return {
     type: 'bubble',
