@@ -71,7 +71,7 @@ export default function LoginForm() {
         <div className="login-wrap">
           {/* Left: shark mascot */}
           <div className="login-shark">
-            <Image src="/login-shark.png" alt="馭浪物流" width={420} height={420} priority />
+            <Image src="/yl_b.png" alt="馭浪物流" width={420} height={420} priority />
           </div>
 
           {/* Right: wordmark + form */}
