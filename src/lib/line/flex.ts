@@ -467,6 +467,82 @@ export function tripsMonthlyQueryBubble(opts: {
   }
 }
 
+export type FuelGroupLine = {
+  label: string
+  count: number
+  total: number
+}
+
+export function fuelMonthlyQueryBubble(opts: {
+  driverName:  string
+  rangeLabel:  string
+  totalCount:  number
+  totalAmount: number
+  byVehicle:   FuelGroupLine[]
+  byPayment:   FuelGroupLine[]
+  driverNote?: string
+}): FlexBubble {
+  const { driverName, rangeLabel, totalCount, totalAmount, byVehicle, byPayment, driverNote } = opts
+
+  const renderGroup = (title: string, lines: FuelGroupLine[]): FlexComponent[] => {
+    if (lines.length === 0) return []
+    const blocks: FlexComponent[] = [
+      { type: 'text', text: title, size: 'xs', color: MUTED, margin: 'md' },
+    ]
+    blocks.push(...lines.map<FlexComponent>(l => ({
+      type: 'box',
+      layout: 'horizontal',
+      contents: [
+        { type: 'text', text: l.label, size: 'sm', color: '#222222', flex: 5, wrap: true },
+        { type: 'text', text: `${l.count} 次 · NT$ ${l.total.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 6 },
+      ],
+    })))
+    return blocks
+  }
+
+  const body: FlexComponent[] = [
+    { type: 'text', text: `${driverName} ・ ${rangeLabel}`, weight: 'bold', size: 'lg', color: '#222222', align: 'center' },
+    { type: 'text', text: '加油查詢', size: 'xs', color: MUTED, align: 'center', margin: 'sm' },
+  ]
+  if (driverNote) {
+    body.push({ type: 'text', text: driverNote, size: 'xs', color: MUTED, align: 'center' })
+  }
+  body.push({ type: 'separator', margin: 'md', color: BORDER })
+
+  if (totalCount === 0) {
+    body.push({ type: 'text', text: '此區間無加油紀錄', size: 'sm', color: MUTED, align: 'center', margin: 'md' })
+  } else {
+    body.push(...renderGroup('依車輛', byVehicle))
+    body.push(...renderGroup('依付款方式', byPayment))
+  }
+
+  body.push({ type: 'separator', margin: 'md', color: BORDER })
+  body.push({
+    type: 'box',
+    layout: 'horizontal',
+    margin: 'md',
+    contents: [
+      { type: 'text', text: '加油次數', size: 'sm', color: MUTED, flex: 2 },
+      { type: 'text', text: `${totalCount} 次`, size: 'sm', color: '#222222', align: 'end', flex: 5 },
+    ],
+  })
+  body.push({
+    type: 'box',
+    layout: 'horizontal',
+    margin: 'sm',
+    contents: [
+      { type: 'text', text: '油資結算', size: 'sm', weight: 'bold', color: '#222222', flex: 2 },
+      { type: 'text', text: `NT$ ${totalAmount.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
+    ],
+  })
+
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body },
+  }
+}
+
 export function tripFormTriggerBubble(liffUrl: string): FlexBubble {
   return {
     type: 'bubble',

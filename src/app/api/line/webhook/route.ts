@@ -4,7 +4,7 @@ import { findDriverByLineUserId, handleBindingInput, startBinding, MENU_HINT } f
 import { handleFuel, handleFuelEntry } from '@/lib/line/flows/fuel'
 import { startTrip } from '@/lib/line/flows/trip'
 import { handleTripText, looksLikeTripText } from '@/lib/line/flows/tripText'
-import { handleQueryText, looksLikeQueryText } from '@/lib/line/flows/query'
+import { handleQueryMenu, handleTripQuery, handleFuelQuery, detectQueryKind } from '@/lib/line/flows/query'
 import { startMaintenance } from '@/lib/line/flows/maintenance'
 import { loadSession, resetSession } from '@/lib/line/session'
 import { reply, textMessage } from '@/lib/line/api'
@@ -132,10 +132,21 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    // 「查詢」/「本月車趟」：回覆當月車趟統計
-    if (text && looksLikeQueryText(text)) {
-      await handleQueryText(driver.id, driver.name, userId, replyToken, text)
-      return
+    // 「查詢」/「查詢車趟」/「查詢油資」：回覆當月統計
+    if (text) {
+      const qKind = detectQueryKind(text)
+      if (qKind === 'menu') {
+        await handleQueryMenu(replyToken)
+        return
+      }
+      if (qKind === 'trip') {
+        await handleTripQuery(driver.id, driver.name, userId, replyToken, text)
+        return
+      }
+      if (qKind === 'fuel') {
+        await handleFuelQuery(driver.id, driver.name, userId, replyToken, text)
+        return
+      }
     }
 
     // 純文字車趟回報（以日期開頭：N號 / 今天 / M月N日 / M/N）
