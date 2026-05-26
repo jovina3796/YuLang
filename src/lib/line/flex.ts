@@ -479,30 +479,30 @@ export function fuelMonthlyQueryBubble(opts: {
   totalCount:  number
   totalAmount: number
   byVehicle:   FuelGroupLine[]
-  byPayment:   FuelGroupLine[]
   driverNote?: string
 }): FlexBubble {
-  const { driverName, rangeLabel, totalCount, totalAmount, byVehicle, byPayment, driverNote } = opts
+  const { driverName, rangeLabel, totalCount, totalAmount, byVehicle, driverNote } = opts
 
-  const renderGroup = (title: string, lines: FuelGroupLine[]): FlexComponent[] => {
-    if (lines.length === 0) return []
-    const blocks: FlexComponent[] = [
-      { type: 'text', text: title, size: 'xs', color: MUTED, margin: 'md' },
-    ]
-    blocks.push(...lines.map<FlexComponent>(l => ({
-      type: 'box',
-      layout: 'horizontal',
-      contents: [
-        { type: 'text', text: l.label, size: 'sm', color: '#222222', flex: 5, wrap: true },
-        { type: 'text', text: `${l.count} 次 · NT$ ${l.total.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 6 },
-      ],
-    })))
-    return blocks
-  }
+  const itemRows: FlexComponent[] = byVehicle.map(l => ({
+    type: 'box',
+    layout: 'horizontal',
+    contents: [
+      {
+        type: 'box',
+        layout: 'vertical',
+        flex: 5,
+        contents: [
+          { type: 'text', text: l.label, size: 'sm', weight: 'bold', color: '#222222', wrap: true },
+          { type: 'text', text: `${l.count} 次`, size: 'xs', color: MUTED },
+        ],
+      },
+      { type: 'text', text: `NT$ ${l.total.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 4 },
+    ],
+  }))
 
   const body: FlexComponent[] = [
     { type: 'text', text: `${driverName} ・ ${rangeLabel}`, weight: 'bold', size: 'lg', color: '#222222', align: 'center' },
-    { type: 'text', text: '加油查詢', size: 'xs', color: MUTED, align: 'center', margin: 'sm' },
+    { type: 'text', text: '加油查詢（依車輛）', size: 'xs', color: MUTED, align: 'center', margin: 'sm' },
   ]
   if (driverNote) {
     body.push({ type: 'text', text: driverNote, size: 'xs', color: MUTED, align: 'center' })
@@ -512,8 +512,7 @@ export function fuelMonthlyQueryBubble(opts: {
   if (totalCount === 0) {
     body.push({ type: 'text', text: '此區間無加油紀錄', size: 'sm', color: MUTED, align: 'center', margin: 'md' })
   } else {
-    body.push(...renderGroup('依車輛', byVehicle))
-    body.push(...renderGroup('依付款方式', byPayment))
+    body.push({ type: 'box', layout: 'vertical', margin: 'md', spacing: 'md', contents: itemRows })
   }
 
   body.push({ type: 'separator', margin: 'md', color: BORDER })

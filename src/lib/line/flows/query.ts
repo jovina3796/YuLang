@@ -205,7 +205,6 @@ export async function handleTripQuery(
 
 type FuelRow = {
   total_cost: number | null
-  payment_method: string | null
   vehicles: { plate_number: string | null } | { plate_number: string | null }[] | null
 }
 
@@ -226,7 +225,7 @@ export async function handleFuelQuery(
   const supabase = createServiceClient()
   const { data: rowsRaw, error } = await supabase
     .from('fuel_logs')
-    .select('total_cost, payment_method, vehicles(plate_number)')
+    .select('total_cost, vehicles(plate_number)')
     .eq('driver_id', acting.id)
     .gte('logged_at', startIso)
     .lt('logged_at', endIso)
@@ -239,7 +238,6 @@ export async function handleFuelQuery(
 
   const rows = (rowsRaw ?? []) as FuelRow[]
   const byVehicle = new Map<string, { count: number; total: number }>()
-  const byPayment = new Map<string, { count: number; total: number }>()
   let totalCount = 0
   let totalAmount = 0
   for (const r of rows) {
@@ -247,15 +245,10 @@ export async function handleFuelQuery(
     const vRaw = r.vehicles
     const v = Array.isArray(vRaw) ? vRaw[0] ?? null : vRaw
     const plate = v?.plate_number ?? '未指定'
-    const pay = r.payment_method ?? '未指定'
     const vEntry = byVehicle.get(plate) ?? { count: 0, total: 0 }
     vEntry.count += 1
     vEntry.total += cost
     byVehicle.set(plate, vEntry)
-    const pEntry = byPayment.get(pay) ?? { count: 0, total: 0 }
-    pEntry.count += 1
-    pEntry.total += cost
-    byPayment.set(pay, pEntry)
     totalCount += 1
     totalAmount += cost
   }
@@ -276,7 +269,6 @@ export async function handleFuelQuery(
         totalCount,
         totalAmount,
         byVehicle: toLines(byVehicle),
-        byPayment: toLines(byPayment),
         driverNote,
       }),
     ),
