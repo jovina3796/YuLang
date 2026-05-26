@@ -108,8 +108,8 @@ async function handleEvent(event: LineEvent): Promise<void> {
     const text = msg.type === 'text' ? msg.text.trim() : null
     const imageId = msg.type === 'image' ? msg.id : null
 
-    // 「/回報」：顯示快速回報指令說明（顯式請求才提示）
-    if (text === '/回報') {
+    // 「/指令」：顯示所有可用指令（顯式請求才提示）
+    if (text === '/指令' || text === '/回報') {
       await reply(replyToken, [textMessage(MENU_HINT)])
       return
     }
