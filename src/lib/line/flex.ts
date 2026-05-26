@@ -488,9 +488,9 @@ export function fuelMonthlyQueryBubble(opts: {
     type: 'box',
     layout: 'horizontal',
     contents: [
-      { type: 'text', text: l.label, size: 'sm', color: '#222222', flex: 4, wrap: true },
-      { type: 'text', text: `${l.count} 次`, size: 'sm', color: MUTED, align: 'end', flex: 2 },
-      { type: 'text', text: `$ ${l.total.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 4 },
+      { type: 'text', text: l.label, size: 'xs', color: '#222222', flex: 4, wrap: true },
+      { type: 'text', text: `${l.count} 次`, size: 'xs', color: MUTED, align: 'end', flex: 2 },
+      { type: 'text', text: `$ ${l.total.toLocaleString()}`, size: 'xs', color: GREEN, align: 'end', flex: 4 },
     ],
   }))
 
