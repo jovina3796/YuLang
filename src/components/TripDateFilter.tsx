@@ -36,20 +36,19 @@ export default function TripDateFilter({ vendors }: { vendors: Vendor[] }) {
   }
 
   function quickRange(days: number) {
-    const end   = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - (days - 1))
-    const f = ymdTaipei(start)
-    const t = ymdTaipei(end)
-    setFrom(f); setTo(t); apply({ from: f, to: t })
+    const todayStr = ymdTaipei(new Date())
+    const [y, m, d] = todayStr.split('-').map(Number)
+    const start = new Date(Date.UTC(y, m - 1, d))
+    start.setUTCDate(start.getUTCDate() - (days - 1))
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const f = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}`
+    setFrom(f); setTo(todayStr); apply({ from: f, to: todayStr })
   }
 
   function thisMonth() {
-    const now = new Date()
-    const f = new Date(now.getFullYear(), now.getMonth(), 1, 12, 0, 0)
-    const fStr = ymdTaipei(f)
-    const tStr = ymdTaipei(now)
-    setFrom(fStr); setTo(tStr); apply({ from: fStr, to: tStr })
+    const todayStr = ymdTaipei(new Date())
+    const fStr = `${todayStr.slice(0, 7)}-01`
+    setFrom(fStr); setTo(todayStr); apply({ from: fStr, to: todayStr })
   }
 
   function clear() {

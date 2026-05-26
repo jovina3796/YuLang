@@ -35,23 +35,23 @@ export default function FuelDateFilter({ vehicles, paymentMethods = [] }: { vehi
   }
 
   function localDateStr(d: Date): string {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
   }
 
   function quickRange(days: number) {
-    const end   = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - (days - 1))
-    const f = localDateStr(start)
-    const t = localDateStr(end)
-    setFrom(f); setTo(t); apply({ from: f, to: t })
+    const todayStr = localDateStr(new Date())
+    const [y, m, d] = todayStr.split('-').map(Number)
+    const start = new Date(Date.UTC(y, m - 1, d))
+    start.setUTCDate(start.getUTCDate() - (days - 1))
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const f = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}`
+    setFrom(f); setTo(todayStr); apply({ from: f, to: todayStr })
   }
 
   function thisMonth() {
-    const now = new Date()
-    const f = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1))
-    const t = localDateStr(now)
-    setFrom(f); setTo(t); apply({ from: f, to: t })
+    const todayStr = localDateStr(new Date())
+    const fStr = `${todayStr.slice(0, 7)}-01`
+    setFrom(fStr); setTo(todayStr); apply({ from: fStr, to: todayStr })
   }
 
   function clear() {
