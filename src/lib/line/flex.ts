@@ -459,6 +459,7 @@ export function tripsMonthlyQueryBubble(opts: {
       { type: 'text', text: `NT$ ${totalFare.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
     ],
   })
+  body.push({ type: 'text', text: '※ 尚未扣除上游抽成', size: 'xs', color: MUTED, align: 'end', margin: 'sm' })
 
   return {
     type: 'bubble',
@@ -474,45 +475,39 @@ export type FuelGroupLine = {
 }
 
 export function fuelMonthlyQueryBubble(opts: {
-  driverName:  string
+  headerLabel: string  // 例：KPD-1681
   rangeLabel:  string
   totalCount:  number
   totalAmount: number
-  byVehicle:   FuelGroupLine[]
-  driverNote?: string
+  byPayment:   FuelGroupLine[]
+  note?:       string  // optional caption shown under header (e.g. 代查)
 }): FlexBubble {
-  const { driverName, rangeLabel, totalCount, totalAmount, byVehicle, driverNote } = opts
+  const { headerLabel, rangeLabel, totalCount, totalAmount, byPayment, note } = opts
 
-  const itemRows: FlexComponent[] = byVehicle.map(l => ({
+  const itemRows: FlexComponent[] = byPayment.map(l => ({
     type: 'box',
     layout: 'horizontal',
     contents: [
-      {
-        type: 'box',
-        layout: 'vertical',
-        flex: 5,
-        contents: [
-          { type: 'text', text: l.label, size: 'sm', weight: 'bold', color: '#222222', wrap: true },
-          { type: 'text', text: `${l.count} 次`, size: 'xs', color: MUTED },
-        ],
-      },
-      { type: 'text', text: `NT$ ${l.total.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 4 },
+      { type: 'text', text: l.label, size: 'sm', color: '#222222', flex: 4, wrap: true },
+      { type: 'text', text: `${l.count} 次`, size: 'sm', color: MUTED, align: 'end', flex: 2 },
+      { type: 'text', text: `$ ${l.total.toLocaleString()}`, size: 'sm', color: GREEN, align: 'end', flex: 4 },
     ],
   }))
 
   const body: FlexComponent[] = [
-    { type: 'text', text: `${driverName} ・ ${rangeLabel}`, weight: 'bold', size: 'lg', color: '#222222', align: 'center' },
-    { type: 'text', text: '加油查詢（依車輛）', size: 'xs', color: MUTED, align: 'center', margin: 'sm' },
+    { type: 'text', text: `${headerLabel} ・ ${rangeLabel}`, weight: 'bold', size: 'lg', color: '#222222', align: 'center' },
+    { type: 'text', text: '加油查詢', size: 'xs', color: MUTED, align: 'center', margin: 'sm' },
   ]
-  if (driverNote) {
-    body.push({ type: 'text', text: driverNote, size: 'xs', color: MUTED, align: 'center' })
+  if (note) {
+    body.push({ type: 'text', text: note, size: 'xs', color: MUTED, align: 'center' })
   }
   body.push({ type: 'separator', margin: 'md', color: BORDER })
 
   if (totalCount === 0) {
     body.push({ type: 'text', text: '此區間無加油紀錄', size: 'sm', color: MUTED, align: 'center', margin: 'md' })
   } else {
-    body.push({ type: 'box', layout: 'vertical', margin: 'md', spacing: 'md', contents: itemRows })
+    body.push({ type: 'text', text: '付款方式', size: 'xs', color: MUTED, margin: 'md' })
+    body.push({ type: 'box', layout: 'vertical', margin: 'sm', spacing: 'sm', contents: itemRows })
   }
 
   body.push({ type: 'separator', margin: 'md', color: BORDER })
@@ -531,7 +526,7 @@ export function fuelMonthlyQueryBubble(opts: {
     margin: 'sm',
     contents: [
       { type: 'text', text: '油資結算', size: 'sm', weight: 'bold', color: '#222222', flex: 2 },
-      { type: 'text', text: `NT$ ${totalAmount.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
+      { type: 'text', text: `$ ${totalAmount.toLocaleString()}`, size: 'md', weight: 'bold', color: GREEN, align: 'end', flex: 5 },
     ],
   })
 

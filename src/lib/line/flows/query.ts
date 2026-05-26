@@ -119,7 +119,7 @@ async function resolveActingDriver(
 export async function handleQueryMenu(replyToken: string): Promise<void> {
   await reply(replyToken, [
     textMessage(
-      '請輸入：\n• 查詢車趟（本月車趟 / 上月 / 近7天）\n• 查詢油資（本月油資 / 上月 / 近7天）\n例：\n  查詢車趟\n  查詢油資 上月\n  查詢車趟 近7天',
+      '請輸入：\n• 查詢車趟（預設本月，可加「上月」、「近7天」）\n• 查詢油資 [車號]（例：查詢油資 KPD-1681）\n例：\n  查詢車趟\n  查詢車趟 上月\n  查詢油資 KPD-1681\n  查詢油資 KPD-1681 近30天',
     ),
   ])
 }
@@ -205,28 +205,52 @@ export async function handleTripQuery(
 
 type FuelRow = {
   total_cost: number | null
-  vehicles: { plate_number: string | null } | { plate_number: string | null }[] | null
+  payment_method: string | null
 }
 
 export async function handleFuelQuery(
-  driverId: string,
-  driverName: string,
-  lineUserId: string,
+  _driverId: string,
+  _driverName: string,
+  _lineUserId: string,
   replyToken: string,
   text: string,
 ): Promise<void> {
-  const acting = await resolveActingDriver(driverId, driverName, lineUserId, text.trim(), replyToken)
-  if (!acting) return
+  // Fuel query is vehicle-scoped (not driver-scoped). Format:
+  //   查詢油資 [車號] [範圍?]
+  const body = text.trim().replace(FUEL_TRIGGER_RE, '').trim()
+  if (!body) {
+    await reply(replyToken, [
+      textMessage('請指定車號，例：\n  查詢油資 KPD-1681\n  查詢油資 KPD-1681 上月\n  查詢油資 KPD-1681 近30天'),
+    ])
+    return
+  }
 
-  const qualifier = acting.remaining.replace(FUEL_TRIGGER_RE, '').trim()
+  const tokens = body.split(/\s+/)
+  const plate = tokens.shift() as string
+  const qualifier = tokens.join(' ').trim()
   const range = parseRange(qualifier)
   const { startIso, endIso } = rangeToUtc(range)
 
   const supabase = createServiceClient()
+  const { data: vehicle, error: vErr } = await supabase
+    .from('vehicles')
+    .select('id, plate_number')
+    .eq('plate_number', plate)
+    .maybeSingle()
+  if (vErr) {
+    console.error('[line.query.fuel] vehicle lookup failed', vErr)
+    await reply(replyToken, [textMessage('查詢失敗，請稍後再試。')])
+    return
+  }
+  if (!vehicle) {
+    await reply(replyToken, [textMessage(`找不到車號「${plate}」，請確認後重新輸入。`)])
+    return
+  }
+
   const { data: rowsRaw, error } = await supabase
     .from('fuel_logs')
-    .select('total_cost, vehicles(plate_number)')
-    .eq('driver_id', acting.id)
+    .select('total_cost, payment_method')
+    .eq('vehicle_id', vehicle.id)
     .gte('logged_at', startIso)
     .lt('logged_at', endIso)
 
@@ -237,39 +261,33 @@ export async function handleFuelQuery(
   }
 
   const rows = (rowsRaw ?? []) as FuelRow[]
-  const byVehicle = new Map<string, { count: number; total: number }>()
+  const byPayment = new Map<string, { count: number; total: number }>()
   let totalCount = 0
   let totalAmount = 0
   for (const r of rows) {
     const cost = r.total_cost ?? 0
-    const vRaw = r.vehicles
-    const v = Array.isArray(vRaw) ? vRaw[0] ?? null : vRaw
-    const plate = v?.plate_number ?? '未指定'
-    const vEntry = byVehicle.get(plate) ?? { count: 0, total: 0 }
-    vEntry.count += 1
-    vEntry.total += cost
-    byVehicle.set(plate, vEntry)
+    const pay = r.payment_method ?? '未指定'
+    const entry = byPayment.get(pay) ?? { count: 0, total: 0 }
+    entry.count += 1
+    entry.total += cost
+    byPayment.set(pay, entry)
     totalCount += 1
     totalAmount += cost
   }
 
-  const toLines = (m: Map<string, { count: number; total: number }>): FuelGroupLine[] =>
-    Array.from(m.entries())
-      .map(([label, v]) => ({ label, count: v.count, total: v.total }))
-      .sort((a, b) => b.total - a.total)
-
-  const driverNote = acting.id !== driverId ? `代 ${acting.name} 查詢` : undefined
+  const lines: FuelGroupLine[] = Array.from(byPayment.entries())
+    .map(([label, v]) => ({ label, count: v.count, total: v.total }))
+    .sort((a, b) => b.total - a.total)
 
   await reply(replyToken, [
     flexMessage(
-      `${acting.name} ${range.label} 油資查詢`,
+      `${vehicle.plate_number} ${range.label} 油資查詢`,
       fuelMonthlyQueryBubble({
-        driverName: acting.name,
+        headerLabel: vehicle.plate_number,
         rangeLabel: range.label,
         totalCount,
         totalAmount,
-        byVehicle: toLines(byVehicle),
-        driverNote,
+        byPayment: lines,
       }),
     ),
   ])
