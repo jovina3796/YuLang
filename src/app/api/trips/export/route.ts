@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
   const to     = searchParams.get('to')     || ''
   const vendor = searchParams.get('vendor') || ''
 
-  const fromIso = from ? new Date(`${from}T00:00:00`).toISOString() : null
-  const toIso   = to   ? new Date(`${to}T23:59:59.999`).toISOString() : null
+  const fromIso = from ? new Date(`${from}T00:00:00+08:00`).toISOString() : null
+  const toIso   = to   ? new Date(`${to}T23:59:59.999+08:00`).toISOString() : null
 
   let q = supabase
     .from('trips')

@@ -23,8 +23,8 @@ export default async function TripsPage({
   const sortField: SortField = (sort as SortField) || 'departed_at'
   const ascending = dir === 'asc'
 
-  const fromIso = from ? new Date(`${from}T00:00:00`).toISOString() : null
-  const toIso   = to   ? new Date(`${to}T23:59:59.999`).toISOString() : null
+  const fromIso = from ? new Date(`${from}T00:00:00+08:00`).toISOString() : null
+  const toIso   = to   ? new Date(`${to}T23:59:59.999+08:00`).toISOString() : null
 
   // Resource scope: 'self' restricts the query (and mutations) to the
   // current user's linked driver_id. If scoped but no driver_id is linked,
