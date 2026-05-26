@@ -42,7 +42,6 @@ export default function LoginForm() {
         .login-shark { display: flex; justify-content: center; align-items: center; }
         .login-shark img { width: 100%; max-width: 380px; height: auto; }
         .login-right { display: flex; flex-direction: column; gap: 28px; align-items: flex-start; }
-        .login-wordmark { width: 100%; max-width: 360px; height: auto; }
         .login-form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 360px; }
         .login-label { display: flex; flex-direction: column; gap: 6px; }
         .login-label > span { font-size: 13px; color: ${TEXT}; letter-spacing: 1px; }
@@ -61,7 +60,6 @@ export default function LoginForm() {
           .login-shark { flex-direction: column; gap: 12px; }
           .login-shark img { max-width: 160px; }
           .login-right { align-items: center; }
-          .login-wordmark { max-width: 280px; }
           .login-form { align-items: stretch; }
           .login-actions { justify-content: center; }
         }
@@ -74,17 +72,8 @@ export default function LoginForm() {
             <Image src="/yl_b.png" alt="馭浪物流" width={420} height={420} priority />
           </div>
 
-          {/* Right: wordmark + form */}
+          {/* Right: form */}
           <div className="login-right">
-            <Image
-              className="login-wordmark"
-              src="/login-wordmark.png"
-              alt="馭浪物流 Yulang Logistics Ltd."
-              width={720}
-              height={320}
-              priority
-            />
-
             <form onSubmit={handleSubmit} className="login-form">
               <label className="login-label">
                 <span>帳號（用戶名或 E-Mail）</span>
