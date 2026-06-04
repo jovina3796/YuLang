@@ -23,8 +23,11 @@ async function getData() {
   const now = new Date()
   const y = now.getFullYear()
   const m = now.getMonth()
-  const monthStart = new Date(y, m, 1).toISOString()
-  const monthEnd   = new Date(y, m + 1, 1).toISOString()
+  // Taipei (UTC+8) 午夜 — 與資料庫中以 +08:00 寫入的 departed_at 對齊，避免跨日問題
+  const tpeMidnight = (yr: number, mo: number, d: number) =>
+    new Date(Date.UTC(yr, mo, d) - 8 * 3600 * 1000)
+  const monthStart = tpeMidnight(y, m, 1).toISOString()
+  const monthEnd   = tpeMidnight(y, m + 1, 1).toISOString()
 
   const toLocalIso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

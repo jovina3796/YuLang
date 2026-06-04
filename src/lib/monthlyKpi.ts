@@ -9,10 +9,14 @@ type Trip = {
   rate_rule_id: string | null; departed_at: string | null; trip_count: number | null
 }
 
+function tpeMidnight(y: number, m: number, d: number) {
+  return new Date(Date.UTC(y, m, d) - 8 * 3600 * 1000)
+}
+
 function periodFor(v: Pick<Vendor, 'billing_cycle_start_day'>, closeY: number, closeM: number) {
   const sd = v.billing_cycle_start_day ?? 1
-  if (sd === 1) return { start: new Date(closeY, closeM, 1), end: new Date(closeY, closeM + 1, 1) }
-  return { start: new Date(closeY, closeM - 1, sd), end: new Date(closeY, closeM, sd) }
+  if (sd === 1) return { start: tpeMidnight(closeY, closeM, 1), end: tpeMidnight(closeY, closeM + 1, 1) }
+  return { start: tpeMidnight(closeY, closeM - 1, sd), end: tpeMidnight(closeY, closeM, sd) }
 }
 
 function shiftMonth(y: number, m: number, deltaMonths: number) {
@@ -39,9 +43,9 @@ export async function getMonthlyKpis(): Promise<{
   const month = now.getMonth()
   const ymStr = `${year}-${String(month + 1).padStart(2, '0')}`
 
-  const windowStart = new Date(year, month - 9, 1).toISOString()
-  const monthStart  = new Date(year, month, 1).toISOString()
-  const monthEnd    = new Date(year, month + 1, 1).toISOString()
+  const windowStart = tpeMidnight(year, month - 9, 1).toISOString()
+  const monthStart  = tpeMidnight(year, month, 1).toISOString()
+  const monthEnd    = tpeMidnight(year, month + 1, 1).toISOString()
 
   const [
     { data: allTrips },
@@ -59,11 +63,11 @@ export async function getMonthlyKpis(): Promise<{
     supabase.from('fuel_logs').select('total_cost')
       .gte('logged_at', monthStart).lt('logged_at', monthEnd),
     supabase.from('maintenance_logs').select('cost, serviced_at, deduct_month')
-      .gte('serviced_at', new Date(year, month - 6, 1).toISOString().slice(0, 10))
-      .lt('serviced_at',  new Date(year, month + 3, 1).toISOString().slice(0, 10)),
+      .gte('serviced_at', tpeMidnight(year, month - 6, 1).toISOString().slice(0, 10))
+      .lt('serviced_at',  tpeMidnight(year, month + 3, 1).toISOString().slice(0, 10)),
     supabase.from('misc_transactions').select('type, amount, transaction_date, deduct_month, payment_status')
-      .gte('transaction_date', new Date(year, month - 6, 1).toISOString().slice(0, 10))
-      .lt('transaction_date',  new Date(year, month + 3, 1).toISOString().slice(0, 10))
+      .gte('transaction_date', tpeMidnight(year, month - 6, 1).toISOString().slice(0, 10))
+      .lt('transaction_date',  tpeMidnight(year, month + 3, 1).toISOString().slice(0, 10))
       .eq('payment_status', 'paid'),
     supabase.from('vendors').select('id, name, warehouse, billing_cycle_start_day, payment_delay_months'),
     supabase.from('vendor_rate_rules').select('id, vendor_id, upstream_commission'),
@@ -99,7 +103,7 @@ export async function getMonthlyKpis(): Promise<{
   const miscIncome  = miscEffective.filter((t: any) => t.type === 'income') .reduce((s: number, t: any) => s + Number(t.amount ?? 0), 0)
   const miscExpense = miscEffective.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount ?? 0), 0)
 
-  const targetMonthDate = new Date(year, month, 15)
+  const targetMonthDate = tpeMidnight(year, month, 15)
   const fixedTotal = (fixedExp ?? []).filter((f: any) => {
     const start = f.start_month ? new Date(f.start_month) : null
     const end   = f.end_month   ? new Date(f.end_month)   : null

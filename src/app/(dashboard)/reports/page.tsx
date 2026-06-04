@@ -1,18 +1,25 @@
 import { createServiceClient } from '@/lib/supabase/service'
 import Link from 'next/link'
 import { ArrowBigRightDash } from 'lucide-react'
+import { billingPeriodLabel } from '../vendor-info/_helpers'
 
 type Vendor = { id: string; name: string; warehouse: string | null; billing_cycle_start_day: number; payment_delay_months: number }
 type Trip   = { final_fare: number | null; vendor_id: string; rate_rule_id: string | null; departed_at: string | null; trip_count: number | null }
 
+// Taipei (UTC+8) 午夜邊界：避免伺服器在 UTC 時，new Date(y,m,d) 產出 UTC 午夜
+// 而與資料庫中以 +08:00 寫入的 departed_at 比對失準（跨日問題）。
+function tpeMidnight(y: number, m: number, d: number) {
+  return new Date(Date.UTC(y, m, d) - 8 * 3600 * 1000)
+}
+
 function periodFor(v: Pick<Vendor, 'billing_cycle_start_day'>, closeY: number, closeM: number) {
   const sd = v.billing_cycle_start_day ?? 1
-  if (sd === 1) return { start: new Date(closeY, closeM, 1), end: new Date(closeY, closeM + 1, 1) }
-  return { start: new Date(closeY, closeM - 1, sd), end: new Date(closeY, closeM, sd) }
+  if (sd === 1) return { start: tpeMidnight(closeY, closeM, 1), end: tpeMidnight(closeY, closeM + 1, 1) }
+  return { start: tpeMidnight(closeY, closeM - 1, sd), end: tpeMidnight(closeY, closeM, sd) }
 }
 
 function naturalMonth(y: number, m: number) {
-  return { start: new Date(y, m, 1), end: new Date(y, m + 1, 1) }
+  return { start: tpeMidnight(y, m, 1), end: tpeMidnight(y, m + 1, 1) }
 }
 
 function shiftMonth(y: number, m: number, deltaMonths: number) {
@@ -55,9 +62,9 @@ export default async function ReportsPage({
   const month = ymMatch ? ymMatch[1] - 1 : now.getMonth()
   const ymStr = `${year}-${String(month + 1).padStart(2, '0')}`
 
-  const windowStart = new Date(year, month - 9, 1).toISOString()
-  const monthStart  = new Date(year, month, 1).toISOString()
-  const monthEnd    = new Date(year, month + 1, 1).toISOString()
+  const windowStart = tpeMidnight(year, month - 9, 1).toISOString()
+  const monthStart  = tpeMidnight(year, month, 1).toISOString()
+  const monthEnd    = tpeMidnight(year, month + 1, 1).toISOString()
   const monthStartD = monthStart.split('T')[0]
   const monthEndD   = monthEnd.split('T')[0]
   void monthStartD; void monthEndD
@@ -76,14 +83,14 @@ export default async function ReportsPage({
       .gte('departed_at', windowStart)
       .eq('status', 'completed'),
     supabase.from('fuel_logs').select('total_cost, liters, logged_at')
-      .gte('logged_at', new Date(year, month - 5, 1).toISOString())
-      .lt('logged_at', new Date(year, month + 1, 1).toISOString()),
+      .gte('logged_at', tpeMidnight(year, month - 5, 1).toISOString())
+      .lt('logged_at', tpeMidnight(year, month + 1, 1).toISOString()),
     supabase.from('maintenance_logs').select('cost, serviced_at, deduct_month')
-      .gte('serviced_at', new Date(year, month - 6, 1).toISOString().split('T')[0])
-      .lt('serviced_at', new Date(year, month + 3, 1).toISOString().split('T')[0]),
+      .gte('serviced_at', tpeMidnight(year, month - 6, 1).toISOString().split('T')[0])
+      .lt('serviced_at', tpeMidnight(year, month + 3, 1).toISOString().split('T')[0]),
     supabase.from('misc_transactions').select('type, amount, category, transaction_date, deduct_month, payment_status')
-      .gte('transaction_date', new Date(year, month - 6, 1).toISOString().split('T')[0])
-      .lt('transaction_date', new Date(year, month + 3, 1).toISOString().split('T')[0])
+      .gte('transaction_date', tpeMidnight(year, month - 6, 1).toISOString().split('T')[0])
+      .lt('transaction_date', tpeMidnight(year, month + 3, 1).toISOString().split('T')[0])
       .eq('payment_status', 'paid'),
     supabase.from('vendors')
       .select('id, name, warehouse, billing_cycle_start_day, payment_delay_months, display_order')
@@ -107,7 +114,7 @@ export default async function ReportsPage({
 
   const fuelCost = (fuelLogs ?? []).filter((f: any) => {
     const at = new Date(f.logged_at)
-    return at >= new Date(year, month, 1) && at < new Date(year, month + 1, 1)
+    return at >= tpeMidnight(year, month, 1) && at < tpeMidnight(year, month + 1, 1)
   }).reduce((s: number, f: any) => s + Number(f.total_cost ?? 0), 0)
 
   // KPI 維修保養：依施作月份 (serviced_at) 加總當月金額
@@ -131,7 +138,7 @@ export default async function ReportsPage({
   const miscExpense = miscEffectiveThisMonth.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount ?? 0), 0)
 
   // Fixed expenses active in target month
-  const targetMonthDate = new Date(year, month, 15)
+  const targetMonthDate = tpeMidnight(year, month, 15)
   const activeFixed = (fixedExp ?? []).filter((f: any) => {
     const start = f.start_month ? new Date(f.start_month) : null
     const end   = f.end_month   ? new Date(f.end_month)   : null
@@ -158,7 +165,7 @@ export default async function ReportsPage({
   function isInThisPeriod(t: Trip): boolean {
     if (!t.departed_at) return false
     const at = new Date(t.departed_at)
-    if (mode === 'natural') return at >= new Date(year, month, 1) && at < new Date(year, month + 1, 1)
+    if (mode === 'natural') return at >= tpeMidnight(year, month, 1) && at < tpeMidnight(year, month + 1, 1)
     const v = vendorMap[t.vendor_id]
     if (!v) return false
     const p = periodFor(v, year, month)
@@ -215,7 +222,7 @@ export default async function ReportsPage({
   })
 
   type Row = {
-    vendorId: string; vendorName: string; item: string
+    vendorId: string; vendorName: string; vendorBilling: string; item: string
     trips: number; revenue: number; commission: number; commissionAmount: number; netRevenue: number
     isFirstOfVendor: boolean; vendorRowSpan?: number; vendorSubtotal?: number
   }
@@ -231,6 +238,9 @@ export default async function ReportsPage({
   vendorOrder.forEach(vid => {
     const v = vendorMap[vid]
     const vendorName = v ? `${v.name}${v.warehouse ? `／${v.warehouse}` : ''}` : vid
+    const vendorBilling = v
+      ? billingPeriodLabel(v.billing_cycle_start_day ?? 1, v.payment_delay_months ?? 2)
+      : ''
     const ruleEntries = Object.entries(breakdown[vid])
       .map(([rid, { rev, trips }]) => {
         const rule = ruleMap[rid]
@@ -252,7 +262,7 @@ export default async function ReportsPage({
 
     ruleEntries.forEach((r, idx) => {
       rows.push({
-        vendorId: vid, vendorName, item: r.item,
+        vendorId: vid, vendorName, vendorBilling, item: r.item,
         trips: r.trips, revenue: r.rev,
         commission: r.commission, commissionAmount: r.commissionAmount,
         netRevenue: r.net,
@@ -284,8 +294,8 @@ export default async function ReportsPage({
       if (!t.departed_at) return s
       const at = new Date(t.departed_at)
       if (mode === 'natural') {
-        const start = new Date(prev.y, prev.m, 1)
-        const end   = new Date(prev.y, prev.m + 1, 1)
+        const start = tpeMidnight(prev.y, prev.m, 1)
+        const end   = tpeMidnight(prev.y, prev.m + 1, 1)
         return at >= start && at < end ? s + (t.final_fare ?? 0) : s
       }
       const v = vendorMap[t.vendor_id]
@@ -318,8 +328,8 @@ export default async function ReportsPage({
   // 6-month fuel trend (liters + cost) — uses natural calendar months
   const fuelTrendData = Array.from({ length: 6 }, (_, i) => {
     const ref = shiftMonth(year, month, -(5 - i))
-    const start = new Date(ref.y, ref.m, 1)
-    const end   = new Date(ref.y, ref.m + 1, 1)
+    const start = tpeMidnight(ref.y, ref.m, 1)
+    const end   = tpeMidnight(ref.y, ref.m + 1, 1)
     const inMonth = (fuelLogs ?? []).filter((f: any) => {
       const at = new Date(f.logged_at)
       return at >= start && at < end
@@ -337,7 +347,7 @@ export default async function ReportsPage({
   let primaryDelay = 2
   let maxCount = 0
   for (const [d, c] of delayCounts) if (c > maxCount) { primaryDelay = d; maxCount = c }
-  const payoutDate = new Date(year, month, 6)
+  const payoutDate = tpeMidnight(year, month, 6)
   const weekdayLabel = ['日', '一', '二', '三', '四', '五', '六'][payoutDate.getDay()]
   const payoutStr = `${payoutDate.getFullYear()}/${String(payoutDate.getMonth() + 1).padStart(2, '0')}/${String(payoutDate.getDate()).padStart(2, '0')} 週${weekdayLabel}`
   void primaryDelay
@@ -516,7 +526,14 @@ export default async function ReportsPage({
               ) : rows.map((r, i) => (
                 <tr key={`${r.vendorId}-${i}`}>
                   {r.isFirstOfVendor ? (
-                    <td className="name" rowSpan={r.vendorRowSpan} style={{ verticalAlign: 'top' }}>{r.vendorName}</td>
+                    <td className="name" rowSpan={r.vendorRowSpan} style={{ verticalAlign: 'top' }}>
+                      <div>{r.vendorName}</div>
+                      {r.vendorBilling && (
+                        <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 400, marginTop: 2 }}>
+                          {r.vendorBilling}
+                        </div>
+                      )}
+                    </td>
                   ) : null}
                   <td>{r.item}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{r.trips}</td>
