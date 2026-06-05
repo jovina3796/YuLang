@@ -18,7 +18,7 @@ export default function Pagination({ page, totalPages, total, pageSize }: Props)
   function hrefFor(nextPage: number, nextSize?: string): string {
     const params = new URLSearchParams(searchParams.toString())
     if (nextSize !== undefined) {
-      if (nextSize === '15') params.delete('pageSize')
+      if (nextSize === '10') params.delete('pageSize')
       else                   params.set('pageSize', nextSize)
       params.delete('page')
     } else {
