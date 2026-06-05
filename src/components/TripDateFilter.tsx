@@ -1,6 +1,7 @@
 'use client'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { Search, X } from 'lucide-react'
 
 type Vendor = { id: string; name: string; warehouse: string | null }
 
@@ -13,47 +14,57 @@ export default function TripDateFilter({ vendors }: { vendors: Vendor[] }) {
   const [to,       setTo]       = useState(searchParams.get('to')     ?? '')
   const [vendorId, setVendorId] = useState(searchParams.get('vendor') ?? '')
 
+  // Re-sync local fields if the URL changes externally (e.g. browser back/forward)
   useEffect(() => {
     setFrom(searchParams.get('from') ?? '')
     setTo(searchParams.get('to') ?? '')
     setVendorId(searchParams.get('vendor') ?? '')
   }, [searchParams])
 
-  function apply(next: { from?: string; to?: string; vendor?: string }) {
+  function buildHref(next: { from: string; to: string; vendor: string }, resetPage = true) {
     const params = new URLSearchParams(searchParams.toString())
-    const set = (k: string, v: string | undefined) => {
-      if (v && v.length) params.set(k, v); else params.delete(k)
+    const set = (k: string, v: string) => {
+      if (v) params.set(k, v); else params.delete(k)
     }
-    set('from',   next.from   ?? from)
-    set('to',     next.to     ?? to)
-    set('vendor', next.vendor ?? vendorId)
+    set('from',   next.from)
+    set('to',     next.to)
+    set('vendor', next.vendor)
+    if (resetPage) params.delete('page')
     const qs = params.toString()
-    router.push(qs ? `${pathname}?${qs}` : pathname)
+    return qs ? `${pathname}?${qs}` : pathname
   }
 
   function ymdTaipei(d: Date): string {
     return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
   }
 
-  function quickRange(days: number) {
+  function applyQuickRange(days: number) {
     const todayStr = ymdTaipei(new Date())
     const [y, m, d] = todayStr.split('-').map(Number)
     const start = new Date(Date.UTC(y, m - 1, d))
     start.setUTCDate(start.getUTCDate() - (days - 1))
     const pad = (n: number) => String(n).padStart(2, '0')
     const f = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}`
-    setFrom(f); setTo(todayStr); apply({ from: f, to: todayStr })
+    setFrom(f); setTo(todayStr)
   }
 
-  function thisMonth() {
+  function applyThisMonth() {
     const todayStr = ymdTaipei(new Date())
     const fStr = `${todayStr.slice(0, 7)}-01`
-    setFrom(fStr); setTo(todayStr); apply({ from: fStr, to: todayStr })
+    setFrom(fStr); setTo(todayStr)
   }
 
-  function clear() {
+  function submitFilter() {
+    router.push(buildHref({ from, to, vendor: vendorId }))
+  }
+
+  function clearFilter() {
     setFrom(''); setTo(''); setVendorId('')
-    apply({ from: '', to: '', vendor: '' })
+    router.push(buildHref({ from: '', to: '', vendor: '' }))
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
+    if (e.key === 'Enter') { e.preventDefault(); submitFilter() }
   }
 
   return (
@@ -62,22 +73,23 @@ export default function TripDateFilter({ vendors }: { vendors: Vendor[] }) {
         type="date" className="input" style={{ width: 150 }}
         value={from} max={to || undefined}
         onChange={e => setFrom(e.target.value)}
-        onBlur={() => apply({})}
+        onKeyDown={onKeyDown}
       />
       <span style={{ color: 'var(--text3)', fontSize: 12 }}>～</span>
       <input
         type="date" className="input" style={{ width: 150 }}
         value={to} min={from || undefined}
         onChange={e => setTo(e.target.value)}
-        onBlur={() => apply({})}
+        onKeyDown={onKeyDown}
       />
-      <button className="btn btn-sm" onClick={() => quickRange(7)}>近 7 天</button>
-      <button className="btn btn-sm" onClick={() => quickRange(30)}>近 30 天</button>
-      <button className="btn btn-sm" onClick={thisMonth}>本月</button>
+      <button type="button" className="btn btn-sm" onClick={() => applyQuickRange(7)}>近 7 天</button>
+      <button type="button" className="btn btn-sm" onClick={() => applyQuickRange(30)}>近 30 天</button>
+      <button type="button" className="btn btn-sm" onClick={applyThisMonth}>本月</button>
       <select
         className="input" style={{ width: 180 }}
         value={vendorId}
-        onChange={e => { setVendorId(e.target.value); apply({ vendor: e.target.value }) }}
+        onChange={e => setVendorId(e.target.value)}
+        onKeyDown={onKeyDown}
       >
         <option value="">全部廠商</option>
         {vendors.map(v => (
@@ -86,9 +98,24 @@ export default function TripDateFilter({ vendors }: { vendors: Vendor[] }) {
           </option>
         ))}
       </select>
-      {(from || to || vendorId) && (
-        <button className="btn btn-sm" onClick={clear} style={{ color: 'var(--text3)' }}>清除</button>
-      )}
+      <button
+        type="button"
+        className="btn btn-sm btn-primary"
+        onClick={submitFilter}
+        title="查詢"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      >
+        <Search size={14} /> 查詢
+      </button>
+      <button
+        type="button"
+        className="btn btn-sm"
+        onClick={clearFilter}
+        title="清除篩選"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text3)' }}
+      >
+        <X size={14} /> 清除
+      </button>
     </div>
   )
 }

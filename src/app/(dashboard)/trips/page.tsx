@@ -4,6 +4,7 @@ import TripRowActions from '@/components/TripRowActions'
 import TripDateFilter from '@/components/TripDateFilter'
 import TripImportExport from '@/components/TripImportExport'
 import SortableTh from '@/components/SortableTh'
+import Pagination, { resolvePageWindow } from '@/components/Pagination'
 import { Check } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/auth'
 import { loadScopeFor } from '@/lib/rolePermissions.server'
@@ -15,10 +16,14 @@ type SortField =
 export default async function TripsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; vendor?: string; sort?: string; dir?: string }>
+  searchParams: Promise<{
+    from?: string; to?: string; vendor?: string;
+    sort?: string; dir?: string;
+    page?: string; pageSize?: string;
+  }>
 }) {
   const supabase = createServiceClient()
-  const { from, to, vendor, sort, dir } = await searchParams
+  const { from, to, vendor, sort, dir, page: pageRaw, pageSize: pageSizeRaw } = await searchParams
 
   const sortField: SortField = (sort as SortField) || 'departed_at'
   const ascending = dir === 'asc'
@@ -46,7 +51,6 @@ export default async function TripsPage({
     `)
     .order('departed_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
-    .limit(200)
 
   if (fromIso) tripsQuery = tripsQuery.gte('departed_at', fromIso)
   if (toIso)   tripsQuery = tripsQuery.lte('departed_at', toIso)
@@ -102,9 +106,18 @@ export default async function TripsPage({
     return ascending ? cmp : -cmp
   })
 
+  // Aggregate stats over the full filtered set (not just the visible page).
+  const totalRows  = sortedTrips.length
+  const totalTrips = sortedTrips.reduce((s: number, t: any) => s + Number(t.trip_count ?? 0), 0)
+  const totalFare  = sortedTrips.reduce((s: number, t: any) => s + Number(t.final_fare  ?? 0), 0)
+
+  // Resolve page window from the URL.
+  const win = resolvePageWindow(totalRows, pageRaw, pageSizeRaw)
+  const pageTrips = sortedTrips.slice(win.startIdx, win.endIdx)
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <TripDateFilter vendors={vendors ?? []} />
         <div style={{ flex: 1 }} />
         {!scopedToSelf && (
@@ -119,6 +132,29 @@ export default async function TripsPage({
             />
           </>
         )}
+      </div>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 18, marginBottom: 12,
+        padding: '8px 14px',
+        background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8,
+        fontSize: 13, color: 'var(--text2)',
+      }}>
+        <span>
+          車趟：<span style={{ fontFamily: 'var(--mono)', color: 'var(--accent2)', fontWeight: 700 }}>
+            {totalTrips.toLocaleString()}
+          </span> 趟
+        </span>
+        <span style={{ color: 'var(--text3)' }}>|</span>
+        <span>
+          運費小計：<span style={{ fontFamily: 'var(--mono)', color: 'var(--accent2)', fontWeight: 700 }}>
+            ${totalFare.toLocaleString()}
+          </span>
+        </span>
+        <span style={{ color: 'var(--text3)' }}>|</span>
+        <span style={{ color: 'var(--text3)' }}>
+          紀錄筆數 {totalRows.toLocaleString()}
+        </span>
       </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
@@ -160,7 +196,7 @@ export default async function TripsPage({
                   尚無資料
                 </td>
               </tr>
-            ) : sortedTrips.map((t: any) => {
+            ) : pageTrips.map((t: any) => {
               const rule      = t.vendor_rate_rules
               const isPerStop = rule?.pricing_mode === 'per_stop_count'
               return (
@@ -228,6 +264,15 @@ export default async function TripsPage({
           </tbody>
         </table>
       </div>
+
+      {totalRows > 0 && (
+        <Pagination
+          page={win.page}
+          totalPages={win.totalPages}
+          total={totalRows}
+          pageSize={win.pageSizeStr}
+        />
+      )}
     </div>
   )
 }
