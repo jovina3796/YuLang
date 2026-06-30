@@ -148,7 +148,17 @@ async function MiscTab({
 }) {
   const supabase = createServiceClient()
 
-  let q = supabase.from('misc_transactions').select('*').order('transaction_date', { ascending: false }).limit(500)
+  // 更新：加入關聯查詢 drivers 與 vehicles
+  let q = supabase
+    .from('misc_transactions')
+    .select(`
+      *,
+      drivers(name),
+      vehicles(plate_number)
+    `)
+    .order('transaction_date', { ascending: false })
+    .limit(500)
+    
   if (type === 'income' || type === 'expense') q = q.eq('type', type)
   if (from) q = q.gte('transaction_date', from)
   if (to)   q = q.lte('transaction_date', to)
@@ -216,16 +226,17 @@ async function MiscTab({
         </div>
         <table style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '8%' }} />
             <col style={{ width: '15%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '20%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '10%' }} />
-            <col />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: 40 }} />
             <col style={{ width: 60 }} />
-            <col style={{ width: 80 }} />
           </colgroup>
           <thead>
             <tr>
@@ -233,10 +244,11 @@ async function MiscTab({
               <SortableTh field="type" defaultField="transaction_date" defaultDir="desc" align="center">類型</SortableTh>
               <SortableTh field="category" defaultField="transaction_date" defaultDir="desc" align="left">類別</SortableTh>
               <SortableTh field="description" defaultField="transaction_date" defaultDir="desc" align="left">說明</SortableTh>
+              <th style={{ textAlign: 'center' }}>司機</th>
+              <th style={{ textAlign: 'center' }}>車輛</th>
               <SortableTh field="amount" defaultField="transaction_date" defaultDir="desc" align="right">金額</SortableTh>
-              <th style={{ textAlign: 'left' }}>付款狀態</th>
+              <th style={{ textAlign: 'left' }}>狀態</th>
               <SortableTh field="deduct_month" defaultField="transaction_date" defaultDir="desc" align="center">扣帳年月</SortableTh>
-              <th style={{ textAlign: 'left' }}>備註</th>
               <th style={{ textAlign: 'center' }}>單據</th>
               <th style={{ textAlign: 'right' }}>操作</th>
             </tr>
@@ -244,7 +256,7 @@ async function MiscTab({
           <tbody>
             {!sorted.length ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>
+                <td colSpan={11} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>
                   尚無資料
                 </td>
               </tr>
@@ -258,6 +270,10 @@ async function MiscTab({
                 </td>
                 <td style={{ textAlign: 'left' }}>{t.category ?? ''}</td>
                 <td style={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>{t.description ?? ''}</td>
+                {/* 顯示關聯資料 */}
+                <td style={{ textAlign: 'center', fontSize: 12 }}>{t.drivers?.name ?? '—'}</td>
+                <td style={{ textAlign: 'center', fontSize: 12 }}>{t.vehicles?.plate_number ?? '—'}</td>
+                
                 <td className="mono" style={{ color: t.type === 'income' ? 'var(--accent2)' : 'var(--red)', textAlign: 'right' }}>
                   {t.type === 'income' ? '+' : '−'}{Number(t.amount).toLocaleString()}
                 </td>
@@ -266,7 +282,6 @@ async function MiscTab({
                     <span className={`badge ${t.payment_status === 'pending' ? 'badge-amber' : 'badge-green'}`}>
                       {t.payment_status === 'pending' ? '待支付' : '已支付'}
                     </span>
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>{t.payment_method ?? ''}</span>
                   </div>
                 </td>
                 <td className="mono" style={{ color: t.deduct_month ? undefined : 'var(--text3)', textAlign: 'center' }}>
@@ -274,7 +289,6 @@ async function MiscTab({
                     ? String(t.deduct_month).slice(0, 7)
                     : `${String(t.transaction_date).slice(0, 7)}（預設）`}
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>{t.notes ?? ''}</td>
                 <td style={{ textAlign: 'center' }}>
                   {t.receipt_url
                     ? <a href={t.receipt_url} target="_blank" rel="noopener noreferrer" title="檢視單據"
@@ -296,6 +310,8 @@ async function MiscTab({
                     payment_status: (t.payment_status ?? 'paid') as 'paid' | 'pending',
                     due_date: t.due_date ?? null,
                     paid_at: t.paid_at ?? null,
+                    driver_id: t.driver_id ?? null,
+                    vehicle_id: t.vehicle_id ?? null,
                   }} />
                 </td>
               </tr>
