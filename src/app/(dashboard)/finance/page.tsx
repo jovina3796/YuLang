@@ -9,6 +9,25 @@ import MiscDateFilter from '@/components/MiscDateFilter'
 import MiscImportExport from '@/components/MiscImportExport'
 import SortableTh from '@/components/SortableTh'
 
+// 確保型別定義與 MiscFormModal.tsx 同步
+export type MiscRow = {
+  id:               string
+  type:             'income' | 'expense'
+  category:         string | null
+  amount:           number
+  description:      string | null
+  transaction_date: string
+  deduct_month:     string | null
+  notes:            string | null
+  receipt_url:      string | null
+  payment_method:   string | null
+  payment_status:   'paid' | 'pending'
+  due_date:         string | null
+  paid_at:          string | null
+  driver_id:        string | null
+  vehicle_id:       string | null
+}
+
 type TabKey = 'fixed' | 'misc'
 
 const TABS = [
@@ -148,25 +167,28 @@ async function MiscTab({
 }) {
   const supabase = createServiceClient()
 
-  // 更新：加入關聯查詢 drivers 與 vehicles
-  let q = supabase
-    .from('misc_transactions')
-    .select(`
-      *,
-      drivers(name),
-      vehicles(plate_number)
-    `)
-    .order('transaction_date', { ascending: false })
-    .limit(500)
+  // 1. 撈取資料並關聯 Drivers 與 Vehicles
+  const [{ data: txs }, { data: drivers }, { data: vehicles }] = await Promise.all([
+    supabase
+      .from('misc_transactions')
+      .select('*, drivers(name), vehicles(plate_number)')
+      .order('transaction_date', { ascending: false })
+      .limit(500),
+    supabase.from('drivers').select('id, name').eq('status', 'active'),
+    supabase.from('vehicles').select('id, plate_number'),
+  ])
     
-  if (type === 'income' || type === 'expense') q = q.eq('type', type)
-  if (from) q = q.gte('transaction_date', from)
-  if (to)   q = q.lte('transaction_date', to)
-  const { data: txs } = await q
+  if (type === 'income' || type === 'expense') /* filter handled below */ null
+  
+  // 處理 filter
+  let filteredTxs = txs ?? []
+  if (type === 'income' || type === 'expense') filteredTxs = filteredTxs.filter(t => t.type === type)
+  if (from) filteredTxs = filteredTxs.filter(t => t.transaction_date >= from)
+  if (to)   filteredTxs = filteredTxs.filter(t => t.transaction_date <= to)
 
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const monthly = (txs ?? []).filter(t => t.transaction_date >= monthStart)
+  const monthly = (filteredTxs ?? []).filter(t => t.transaction_date >= monthStart)
   const monthIncome  = monthly.filter(t => t.type === 'income') .reduce((s, t) => s + (t.amount ?? 0), 0)
   const monthExpense = monthly.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amount ?? 0), 0)
   const monthNet     = monthIncome - monthExpense
@@ -182,7 +204,7 @@ async function MiscTab({
       default:                 return ''
     }
   }
-  const sorted = [...(txs ?? [])].sort((a, b) => {
+  const sorted = [...filteredTxs].sort((a, b) => {
     const av = getKey(a), bv = getKey(b)
     if (av === bv) return 0
     if (typeof av === 'number' && typeof bv === 'number') return ascending ? av - bv : bv - av
@@ -215,7 +237,12 @@ async function MiscTab({
         <MiscDateFilter />
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <MiscImportExport />
-          <MiscFormModal mode="create" />
+          {/* 傳遞 drivers 與 vehicles 給 Modal */}
+          <MiscFormModal 
+             mode="create" 
+             drivers={drivers ?? []} 
+             vehicles={vehicles ?? []} 
+          />
         </div>
       </div>
 
@@ -270,10 +297,8 @@ async function MiscTab({
                 </td>
                 <td style={{ textAlign: 'left' }}>{t.category ?? ''}</td>
                 <td style={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>{t.description ?? ''}</td>
-                {/* 顯示關聯資料 */}
                 <td style={{ textAlign: 'center', fontSize: 12 }}>{t.drivers?.name ?? '—'}</td>
                 <td style={{ textAlign: 'center', fontSize: 12 }}>{t.vehicles?.plate_number ?? '—'}</td>
-                
                 <td className="mono" style={{ color: t.type === 'income' ? 'var(--accent2)' : 'var(--red)', textAlign: 'right' }}>
                   {t.type === 'income' ? '+' : '−'}{Number(t.amount).toLocaleString()}
                 </td>
@@ -296,23 +321,27 @@ async function MiscTab({
                     : <span style={{ color: 'var(--text3)' }}>—</span>}
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <MiscRowActions tx={{
-                    id: t.id,
-                    type: t.type,
-                    category: t.category ?? null,
-                    amount: Number(t.amount),
-                    description: t.description ?? null,
-                    transaction_date: t.transaction_date,
-                    deduct_month: t.deduct_month ?? null,
-                    notes: t.notes ?? null,
-                    receipt_url: t.receipt_url ?? null,
-                    payment_method: t.payment_method ?? null,
-                    payment_status: (t.payment_status ?? 'paid') as 'paid' | 'pending',
-                    due_date: t.due_date ?? null,
-                    paid_at: t.paid_at ?? null,
-                    driver_id: t.driver_id ?? null,
-                    vehicle_id: t.vehicle_id ?? null,
-                  }} />
+                  <MiscRowActions 
+                    tx={{
+                      id: t.id,
+                      type: t.type,
+                      category: t.category ?? null,
+                      amount: Number(t.amount),
+                      description: t.description ?? null,
+                      transaction_date: t.transaction_date,
+                      deduct_month: t.deduct_month ?? null,
+                      notes: t.notes ?? null,
+                      receipt_url: t.receipt_url ?? null,
+                      payment_method: t.payment_method ?? null,
+                      payment_status: (t.payment_status ?? 'paid') as 'paid' | 'pending',
+                      due_date: t.due_date ?? null,
+                      paid_at: t.paid_at ?? null,
+                      driver_id: t.driver_id ?? null,
+                      vehicle_id: t.vehicle_id ?? null,
+                    }} 
+                    drivers={drivers ?? []}
+                    vehicles={vehicles ?? []}
+                  />
                 </td>
               </tr>
             ))}
