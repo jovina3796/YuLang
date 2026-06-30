@@ -5,7 +5,7 @@ import { billingPeriodLabel } from '../vendor-info/_helpers'
 
 type Vendor = { id: string; name: string; warehouse: string | null; billing_cycle_start_day: number; payment_delay_months: number }
 type Trip   = { final_fare: number | null; vendor_id: string; rate_rule_id: string | null; departed_at: string | null; trip_count: number | null; driver_id: string | null }
-type Driver = { id: string; name: string }
+type Driver = { id: string; name: string; default_vehicle_id: string | null }
 
 // Taipei (UTC+8) 午夜邊界：避免伺服器在 UTC 時，new Date(y,m,d) 產出 UTC 午夜
 // 而與資料庫中以 +08:00 寫入的 departed_at 比對失準（跨日問題）。
@@ -70,7 +70,7 @@ export default async function ReportsPage({
   const monthEndD   = monthEnd.split('T')[0]
   void monthStartD; void monthEndD
 
-  // 動態建立帶有司機篩選條件的查詢
+  // 動態建立帶有司機篩選條件的查詢 (針對車趟與加油)
   let tripsQuery = supabase.from('trips')
     .select('final_fare, vendor_id, rate_rule_id, departed_at, trip_count, driver_id')
     .gte('departed_at', windowStart)
@@ -87,6 +87,7 @@ export default async function ReportsPage({
     fuelLogsQuery = fuelLogsQuery.eq('driver_id', driverId)
   }
 
+  // 執行所有查詢
   const [
     { data: allTrips },
     { data: fuelLogs },
@@ -96,10 +97,11 @@ export default async function ReportsPage({
     { data: rateRules },
     { data: fixedExp },
     { data: allDrivers },
+    { data: allVehicles },
   ] = await Promise.all([
     tripsQuery,
     fuelLogsQuery,
-    supabase.from('maintenance_logs').select('cost, serviced_at, deduct_month')
+    supabase.from('maintenance_logs').select('cost, serviced_at, deduct_month, vehicle_id')
       .gte('serviced_at', tpeMidnight(year, month - 6, 1).toISOString().split('T')[0])
       .lt('serviced_at', tpeMidnight(year, month + 3, 1).toISOString().split('T')[0]),
     supabase.from('misc_transactions').select('type, amount, category, transaction_date, deduct_month, payment_status')
@@ -112,16 +114,45 @@ export default async function ReportsPage({
     supabase.from('vendor_rate_rules')
       .select('id, vendor_id, service_type, destination_area, upstream_commission'),
     supabase.from('fixed_expenses')
-      .select('name, category, amount, active, start_month, end_month')
+      .select('name, category, amount, active, start_month, end_month, vehicle_id')
       .eq('active', true),
     supabase.from('drivers')
-      .select('id, name')
+      .select('id, name, default_vehicle_id')
       .eq('status', 'active')
       .order('display_order', { ascending: true, nullsFirst: false }),
+    supabase.from('vehicles')
+      .select('id, assigned_driver_id')
   ])
+
+  // ===== 建立關聯車輛過濾邏輯 =====
+  const allowedVehicleIds = new Set<string>()
+  if (driverId && driverId !== 'all') {
+    // 1. 從司機預設車輛找
+    const driverInfo = (allDrivers ?? []).find(d => d.id === driverId)
+    if (driverInfo?.default_vehicle_id) allowedVehicleIds.add(driverInfo.default_vehicle_id)
+    
+    // 2. 從車輛指派紀錄找
+    ;(allVehicles ?? []).forEach(v => {
+      if (v.assigned_driver_id === driverId) allowedVehicleIds.add(v.id)
+    })
+  }
+
+  let validMaintLogs = (maintLogs ?? []) as any[]
+  let validFixedExp = (fixedExp ?? []) as any[]
+  let validMiscTxs = (miscTxs ?? []) as any[]
+
+  if (driverId && driverId !== 'all') {
+    // 扣除項目只列出該司機駕駛車輛的費用
+    validMaintLogs = validMaintLogs.filter(m => m.vehicle_id && allowedVehicleIds.has(m.vehicle_id))
+    validFixedExp = validFixedExp.filter(f => f.vehicle_id && allowedVehicleIds.has(f.vehicle_id))
+    // 雜項通常視為公司公費，若篩選個人帳則歸零
+    validMiscTxs = [] 
+  }
+  // ==================================
 
   const trips: Trip[] = (allTrips ?? []) as Trip[]
   const drivers: Driver[] = (allDrivers ?? []) as Driver[]
+  
   const vendorMap: Record<string, Vendor> = {}
   ;(vendors ?? []).forEach(v => {
     vendorMap[v.id] = {
@@ -137,19 +168,19 @@ export default async function ReportsPage({
   }).reduce((s: number, f: any) => s + Number(f.total_cost ?? 0), 0)
 
   // KPI 維修保養：依施作月份 (serviced_at) 加總當月金額
-  const maintCostByService = (maintLogs ?? []).filter((m: any) =>
+  const maintCostByService = validMaintLogs.filter((m: any) =>
     String(m.serviced_at).slice(0, 7) === ymStr
   ).reduce((s: number, m: any) => s + Number(m.cost ?? 0), 0)
 
   // 扣項統計用：依 deduct_month 設定（無則 fallback 至施作月）
-  const maintCost = (maintLogs ?? []).filter((m: any) => {
+  const maintCost = validMaintLogs.filter((m: any) => {
     const effective = m.deduct_month ? String(m.deduct_month).slice(0, 7) : String(m.serviced_at).slice(0, 7)
     return effective === ymStr
   }).reduce((s: number, m: any) => s + Number(m.cost ?? 0), 0)
 
-  // Misc: use deduct_month if set, else transaction_date — filter to the viewing month
+  // Misc: use deduct_month if set, else transaction_date
   const ymStrShort = ymStr // YYYY-MM
-  const miscEffectiveThisMonth = (miscTxs ?? []).filter((t: any) => {
+  const miscEffectiveThisMonth = validMiscTxs.filter((t: any) => {
     const effective = t.deduct_month ? String(t.deduct_month).slice(0, 7) : String(t.transaction_date).slice(0, 7)
     return effective === ymStrShort
   })
@@ -158,7 +189,7 @@ export default async function ReportsPage({
 
   // Fixed expenses active in target month
   const targetMonthDate = tpeMidnight(year, month, 15)
-  const activeFixed = (fixedExp ?? []).filter((f: any) => {
+  const activeFixed = validFixedExp.filter((f: any) => {
     const start = f.start_month ? new Date(f.start_month) : null
     const end   = f.end_month   ? new Date(f.end_month)   : null
     if (start && targetMonthDate < start) return false
@@ -192,12 +223,6 @@ export default async function ReportsPage({
   }
   const periodTrips = trips.filter(isInThisPeriod)
 
-  // ===== 兩種計費區間 =====
-  // 1) incomingTrips — 本月實際入帳的車趟（上個計費區間，已延遲到 viewing-month 入帳）
-  //                    → 用於左上「應收款項」KPI、左下「本月進項統計」
-  // 2) periodTrips   — 本月 (viewing month) 跑的車趟，款項在 viewing-month + 延遲月入帳
-  //                    → 用於廠商佔比圖、KPI「當月營收小計」
-
   // Viewing-month vendor share (for 廠商收入佔比 chart)
   const periodByVendor: Record<string, number> = {}
   periodTrips.forEach(t => {
@@ -230,7 +255,6 @@ export default async function ReportsPage({
   })
 
   // 進項統計 — 對應「本月實際入帳」的車趟
-  // Group: vendor -> rule -> { rev, trips }
   const breakdown: Record<string, Record<string, { rev: number; trips: number }>> = {}
   incomingTrips.forEach(t => {
     if (!t.vendor_id || !t.rate_rule_id) return
@@ -299,14 +323,9 @@ export default async function ReportsPage({
   if (miscExpense > 0) deductionRows.push({ label: '其他項目', amount: miscExpense })
   const deductionTotal = deductionRows.reduce((s, r) => s + r.amount, 0)
 
-  // 應收款項 = 本月實際入帳金額（上個計費區間的車趟款 - 上游抽成 - 本月扣項）
   const netReceivable = grandNet - deductionTotal
-
-  // 當月營收小計 = 本月車趟即時淨值 + 其他收入 - 扣項
-  // 油料成本另以信用卡/現金支付，已實際支出，僅列出供查看，不納入營收計算
   const profit = periodGrandNet - deductionTotal + miscIncome
 
-  // Compare with previous month's period trips for delta (for 當月營收小計)
   const prevPeriodRev = (() => {
     const prev = shiftMonth(year, month, -1)
     return trips.reduce((s, t) => {
@@ -325,7 +344,6 @@ export default async function ReportsPage({
   })()
   const revDelta = prevPeriodRev > 0 ? (((periodGrandRev - prevPeriodRev) / prevPeriodRev) * 100).toFixed(1) : null
 
-  // Vendor revenue share for the right-middle panel (uses VIEWING-month trips)
   const vendorRevList = Object.entries(periodByVendor)
     .map(([vid, rev]) => {
       const v = vendorMap[vid]
@@ -335,7 +353,6 @@ export default async function ReportsPage({
     .slice(0, 6)
   const totalVendorRev = vendorRevList.reduce((s, v) => s + v.rev, 0)
 
-  // 6-month trend
   const trendData = Array.from({ length: 6 }, (_, i) => {
     const ref = shiftMonth(year, month, -(5 - i))
     const label = `${ref.y}/${String(ref.m + 1).padStart(2, '0')}`
@@ -344,7 +361,6 @@ export default async function ReportsPage({
   })
   const maxRev = Math.max(...trendData.map(d => d.rev), 1)
 
-  // 6-month fuel trend (liters + cost) — uses natural calendar months
   const fuelTrendData = Array.from({ length: 6 }, (_, i) => {
     const ref = shiftMonth(year, month, -(5 - i))
     const start = tpeMidnight(ref.y, ref.m, 1)
@@ -360,7 +376,6 @@ export default async function ReportsPage({
   const maxFuelLiters = Math.max(...fuelTrendData.map(d => d.liters), 1)
   const maxFuelCost   = Math.max(...fuelTrendData.map(d => d.cost), 1)
 
-  // 上游支付日期 — 本月實際入帳的車趟（incoming）會在 viewing-month 的 6 號入帳
   const delayCounts = new Map<number, number>()
   ;(vendors ?? []).forEach(v => delayCounts.set(v.payment_delay_months ?? 2, (delayCounts.get(v.payment_delay_months ?? 2) ?? 0) + 1))
   let primaryDelay = 2
@@ -382,7 +397,7 @@ export default async function ReportsPage({
             className="input" style={{ height: 30, padding: '4px 10px', fontSize: 12, width: 140 }}
           />
 
-          {/* 新增的司機篩選下拉選單 */}
+          {/* 司機下拉選單 */}
           <select
             name="driverId"
             defaultValue={driverId || 'all'}
