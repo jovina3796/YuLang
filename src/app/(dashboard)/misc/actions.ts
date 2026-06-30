@@ -15,6 +15,9 @@ export type MiscTransactionInput = {
   payment_status:   'paid' | 'pending'
   due_date:         string | null
   paid_at:          string | null
+  // ★ 新增這兩個選填欄位
+  driver_id?:       string | null
+  vehicle_id?:      string | null
 }
 
 const BUCKET = 'misc-receipts'
