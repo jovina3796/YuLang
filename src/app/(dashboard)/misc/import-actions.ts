@@ -85,6 +85,9 @@ export async function importMiscCsv(csvText: string): Promise<{
       deduct_month: deductMonth,
       notes:       get('備註')     || null,
       receipt_url: get('單據網址') || null,
+      // ★ 新增讀取 CSV 中的司機與車輛 ID (如果你的 CSV 有這兩個欄位的話)
+      driver_id:   get('司機ID')   || null,
+      vehicle_id:  get('車輛ID')   || null,
     })
   }
 
