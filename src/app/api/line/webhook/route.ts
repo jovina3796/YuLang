@@ -8,6 +8,7 @@ import { handleQueryMenu, handleTripQuery, handleFuelQuery, detectQueryKind } fr
 import { startMaintenance } from '@/lib/line/flows/maintenance'
 import { loadSession, resetSession } from '@/lib/line/session'
 import { reply, textMessage } from '@/lib/line/api'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -114,7 +115,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    // 「加油」開頭一律當新指令（含逐步引導與快速回報），不論目前 session 狀態
+    // 「加油」開頭一律當新指令
     if (text && /^加油(\s|$)/.test(text)) {
       await handleFuelEntry(driver.id, userId, replyToken, text)
       return
@@ -132,7 +133,13 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    // 「查詢」/「查詢車趟」/「查詢油資」：回覆當月統計
+    // 🌟 攔截進階的「車趟查詢」指令 (支援指定月份與司機)
+    if (text && (text.startsWith('車趟查詢') || text.startsWith('查詢車趟'))) {
+      await handleAdvancedTripQuery(replyToken, text, driver.id, driver.name)
+      return
+    }
+
+    // 原有的查詢邏輯 fallback
     if (text) {
       const qKind = detectQueryKind(text)
       if (qKind === 'menu') {
@@ -149,7 +156,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
       }
     }
 
-    // 純文字車趟回報（以日期開頭：N號 / 今天 / M月N日 / M/N）
+    // 純文字車趟回報
     if (text && looksLikeTripText(text)) {
       await handleTripText(driver.id, driver.name, userId, replyToken, text)
       return
@@ -161,11 +168,92 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    // idle 或無法辨識的狀態：保持沉默（讓人工客服可以正常回覆）
+    // idle 或無法辨識的狀態：保持沉默
     if (session.state !== 'idle') {
       await resetSession(userId)
     }
   } catch (err) {
     console.error('[line.webhook] handler error', err)
   }
+}
+
+// ============================================================================
+// 進階車趟查詢邏輯
+// ============================================================================
+async function handleAdvancedTripQuery(replyToken: string, text: string, defaultDriverId: string, defaultDriverName: string) {
+  const supabase = createServiceClient()
+
+  let targetMonthStr = ''
+  let targetDriverName = ''
+
+  // 解析指令
+  const matchMonth = text.match(/(\d{4}-\d{2})/)
+  if (matchMonth) targetMonthStr = matchMonth[1]
+
+  const matchDriver = text.match(/指定司機\s*(\S+)/)
+  if (matchDriver) targetDriverName = matchDriver[1]
+
+  // 計算時間邊界
+  const now = new Date()
+  let year = now.getFullYear()
+  let month = now.getMonth()
+
+  if (targetMonthStr) {
+    const parts = targetMonthStr.split('-')
+    year = parseInt(parts[0], 10)
+    month = parseInt(parts[1], 10) - 1
+  }
+
+  const ymStr = `${year}-${String(month + 1).padStart(2, '0')}`
+  const tpeMidnight = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d) - 8 * 3600 * 1000)
+  const monthStart = tpeMidnight(year, month, 1).toISOString()
+  const monthEnd   = tpeMidnight(year, month + 1, 1).toISOString()
+
+  // 決定目標司機
+  let targetDriverId = defaultDriverId
+  let driverDisplayName = defaultDriverName
+
+  if (targetDriverName) {
+    const { data: d, error } = await supabase
+      .from('drivers')
+      .select('id, name')
+      .eq('name', targetDriverName)
+      .single()
+
+    if (error || !d) {
+      await reply(replyToken, [textMessage(`❌ 系統中找不到名為「${targetDriverName}」的司機。`)])
+      return
+    }
+    targetDriverId = d.id
+    driverDisplayName = d.name
+  }
+
+  // 撈取資料
+  const { data: trips, error: tripsError } = await supabase
+    .from('trips')
+    .select('final_fare')
+    .eq('driver_id', targetDriverId)
+    .eq('status', 'completed')
+    .gte('departed_at', monthStart)
+    .lt('departed_at', monthEnd)
+
+  if (tripsError) {
+    console.error('Advanced Query Error:', tripsError)
+    await reply(replyToken, [textMessage('❌ 系統查詢車趟時發生錯誤，請稍後再試。')])
+    return
+  }
+
+  const totalTrips = trips?.length || 0
+  const totalFare = trips?.reduce((sum, t) => sum + Number(t.final_fare || 0), 0) || 0
+
+  const replyStr = 
+    `📊 【${driverDisplayName}】車趟查詢\n` +
+    `📅 查詢月份：${ymStr}\n` +
+    `----------------------\n` +
+    `🚗 完成趟次：${totalTrips} 趟\n` +
+    `💰 預估運費：NT$ ${totalFare.toLocaleString()}\n` +
+    `----------------------\n` +
+    `(※ 實際金額依最終報表結算為準)`
+
+  await reply(replyToken, [textMessage(replyStr)])
 }
