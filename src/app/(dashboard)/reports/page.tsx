@@ -4,7 +4,8 @@ import { ArrowBigRightDash } from 'lucide-react'
 import { billingPeriodLabel } from '../vendor-info/_helpers'
 
 type Vendor = { id: string; name: string; warehouse: string | null; billing_cycle_start_day: number; payment_delay_months: number }
-type Trip   = { final_fare: number | null; vendor_id: string; rate_rule_id: string | null; departed_at: string | null; trip_count: number | null }
+type Trip   = { final_fare: number | null; vendor_id: string; rate_rule_id: string | null; departed_at: string | null; trip_count: number | null; driver_id: string | null }
+type Driver = { id: string; name: string }
 
 // Taipei (UTC+8) 午夜邊界：避免伺服器在 UTC 時，new Date(y,m,d) 產出 UTC 午夜
 // 而與資料庫中以 +08:00 寫入的 departed_at 比對失準（跨日問題）。
@@ -50,10 +51,10 @@ function sumTripsInRange(trips: Trip[], vendorMap: Record<string, Vendor>, close
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cycle?: string; ym?: string }>
+  searchParams: Promise<{ cycle?: string; ym?: string; driverId?: string }>
 }) {
   const supabase = createServiceClient()
-  const { cycle, ym } = await searchParams
+  const { cycle, ym, driverId } = await searchParams
   const mode: 'natural' | 'billing' = cycle === 'natural' ? 'natural' : 'billing'
 
   const now = new Date()
@@ -69,6 +70,23 @@ export default async function ReportsPage({
   const monthEndD   = monthEnd.split('T')[0]
   void monthStartD; void monthEndD
 
+  // 動態建立帶有司機篩選條件的查詢
+  let tripsQuery = supabase.from('trips')
+    .select('final_fare, vendor_id, rate_rule_id, departed_at, trip_count, driver_id')
+    .gte('departed_at', windowStart)
+    .eq('status', 'completed')
+  if (driverId && driverId !== 'all') {
+    tripsQuery = tripsQuery.eq('driver_id', driverId)
+  }
+
+  let fuelLogsQuery = supabase.from('fuel_logs')
+    .select('total_cost, liters, logged_at')
+    .gte('logged_at', tpeMidnight(year, month - 5, 1).toISOString())
+    .lt('logged_at', tpeMidnight(year, month + 1, 1).toISOString())
+  if (driverId && driverId !== 'all') {
+    fuelLogsQuery = fuelLogsQuery.eq('driver_id', driverId)
+  }
+
   const [
     { data: allTrips },
     { data: fuelLogs },
@@ -77,14 +95,10 @@ export default async function ReportsPage({
     { data: vendors },
     { data: rateRules },
     { data: fixedExp },
+    { data: allDrivers },
   ] = await Promise.all([
-    supabase.from('trips')
-      .select('final_fare, vendor_id, rate_rule_id, departed_at, trip_count')
-      .gte('departed_at', windowStart)
-      .eq('status', 'completed'),
-    supabase.from('fuel_logs').select('total_cost, liters, logged_at')
-      .gte('logged_at', tpeMidnight(year, month - 5, 1).toISOString())
-      .lt('logged_at', tpeMidnight(year, month + 1, 1).toISOString()),
+    tripsQuery,
+    fuelLogsQuery,
     supabase.from('maintenance_logs').select('cost, serviced_at, deduct_month')
       .gte('serviced_at', tpeMidnight(year, month - 6, 1).toISOString().split('T')[0])
       .lt('serviced_at', tpeMidnight(year, month + 3, 1).toISOString().split('T')[0]),
@@ -100,9 +114,14 @@ export default async function ReportsPage({
     supabase.from('fixed_expenses')
       .select('name, category, amount, active, start_month, end_month')
       .eq('active', true),
+    supabase.from('drivers')
+      .select('id, name')
+      .eq('status', 'active')
+      .order('display_order', { ascending: true, nullsFirst: false }),
   ])
 
   const trips: Trip[] = (allTrips ?? []) as Trip[]
+  const drivers: Driver[] = (allDrivers ?? []) as Driver[]
   const vendorMap: Record<string, Vendor> = {}
   ;(vendors ?? []).forEach(v => {
     vendorMap[v.id] = {
@@ -362,14 +381,29 @@ export default async function ReportsPage({
             type="month" name="ym" defaultValue={ymStr}
             className="input" style={{ height: 30, padding: '4px 10px', fontSize: 12, width: 140 }}
           />
+
+          {/* 新增的司機篩選下拉選單 */}
+          <select
+            name="driverId"
+            defaultValue={driverId || 'all'}
+            className="input"
+            style={{ height: 30, padding: '4px 10px', fontSize: 12, minWidth: 130, borderRadius: 6, border: '1px solid var(--border)', background: '#fff' }}
+          >
+            <option value="all">所有司機</option>
+            {drivers.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+
           <button type="submit" className="btn btn-sm">查詢</button>
+          
           <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginLeft: 12 }}>
-            <Link href={`/reports?cycle=natural${ym ? `&ym=${ymStr}` : ''}`} prefetch={false} style={{
+            <Link href={`/reports?cycle=natural${ym ? `&ym=${ymStr}` : ''}${driverId ? `&driverId=${driverId}` : ''}`} prefetch={false} style={{
               padding: '6px 14px', fontSize: 12, textDecoration: 'none',
               background: mode === 'natural' ? 'var(--accent2)' : 'transparent',
               color:      mode === 'natural' ? '#fff' : 'var(--text2)',
             }}>自然月</Link>
-            <Link href={`/reports?cycle=billing${ym ? `&ym=${ymStr}` : ''}`} prefetch={false} style={{
+            <Link href={`/reports?cycle=billing${ym ? `&ym=${ymStr}` : ''}${driverId ? `&driverId=${driverId}` : ''}`} prefetch={false} style={{
               padding: '6px 14px', fontSize: 12, textDecoration: 'none',
               background: mode === 'billing' ? 'var(--accent2)' : 'transparent',
               color:      mode === 'billing' ? '#fff' : 'var(--text2)',
@@ -383,32 +417,32 @@ export default async function ReportsPage({
         {[
           {
             label: `${ymStr} 應收款項`,
-            value: netReceivable !== 0 ? Math.round(netReceivable).toLocaleString() : '',
+            value: netReceivable !== 0 ? Math.round(netReceivable).toLocaleString() : '0',
             color: 'var(--accent2)',
             sub: `已扣上游抽成 ${Math.round(grandCommissionAmt).toLocaleString()} + 扣項 ${Math.round(deductionTotal).toLocaleString()}`,
             big: true,
           },
           {
             label: `${ymStr} 油料成本`,
-            value: fuelCost > 0 ? fuelCost.toLocaleString() : '',
+            value: fuelCost > 0 ? fuelCost.toLocaleString() : '0',
             color: 'var(--amber2)',
             sub: '另以信用卡/現金支付，不計入營收',
           },
           {
             label: `${ymStr} 維修保養`,
-            value: maintCostByService > 0 ? maintCostByService.toLocaleString() : '',
+            value: maintCostByService > 0 ? maintCostByService.toLocaleString() : '0',
             color: 'var(--red)',
             sub: '本月施作金額加總',
           },
           {
             label: `${ymStr} 其他支出項目`,
-            value: miscExpense > 0 ? miscExpense.toLocaleString() : '',
+            value: miscExpense > 0 ? miscExpense.toLocaleString() : '0',
             color: 'var(--purple)',
             sub: '計入本月費用',
           },
           {
             label: `${ymStr} 當月營收小計`,
-            value: periodGrandRev > 0 ? Math.round(profit).toLocaleString() : '',
+            value: periodGrandRev > 0 ? Math.round(profit).toLocaleString() : '0',
             color: profit >= 0 ? 'var(--accent2)' : 'var(--red)',
             sub: revDelta !== null ? `${Number(revDelta) >= 0 ? '▲' : '▼'} ${Math.abs(Number(revDelta))}% 較上月` : '本月可支配淨額',
           },
@@ -433,7 +467,7 @@ export default async function ReportsPage({
                   <div style={{ height: '100%', width: `${(d.rev / maxRev) * 100}%`, background: 'var(--accent)', borderRadius: 2 }} />
                 </div>
                 <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--accent2)', width: 64, textAlign: 'right', flexShrink: 0 }}>
-                  {d.rev > 0 ? d.rev.toLocaleString() : ''}
+                  {d.rev > 0 ? d.rev.toLocaleString() : '0'}
                 </div>
               </div>
             ))}
@@ -458,7 +492,7 @@ export default async function ReportsPage({
                       <div style={{ height: '100%', width: `${(d.liters / maxFuelLiters) * 100}%`, background: 'var(--purple)', borderRadius: 2 }} />
                     </div>
                     <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--purple)', width: 60, textAlign: 'right', flexShrink: 0 }}>
-                      {d.liters > 0 ? `${d.liters.toLocaleString(undefined, { maximumFractionDigits: 0 })} L` : ''}
+                      {d.liters > 0 ? `${d.liters.toLocaleString(undefined, { maximumFractionDigits: 0 })} L` : '0 L'}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -466,7 +500,7 @@ export default async function ReportsPage({
                       <div style={{ height: '100%', width: `${(d.cost / maxFuelCost) * 100}%`, background: 'var(--amber2)', borderRadius: 2 }} />
                     </div>
                     <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--amber2)', width: 60, textAlign: 'right', flexShrink: 0 }}>
-                      {d.cost > 0 ? d.cost.toLocaleString() : ''}
+                      {d.cost > 0 ? d.cost.toLocaleString() : '0'}
                     </div>
                   </div>
                 </div>
