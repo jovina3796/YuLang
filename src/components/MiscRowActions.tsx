@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation'
 import { deleteMiscTransaction } from '@/app/(dashboard)/misc/actions'
 import MiscFormModal, { type MiscRow } from './MiscFormModal'
 
-export default function MiscRowActions({ tx }: { tx: MiscRow }) {
+interface Props {
+  tx: MiscRow
+  drivers: { id: string; name: string }[]
+  vehicles: { id: string; plate_number: string }[]
+}
+
+export default function MiscRowActions({ tx, drivers, vehicles }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
@@ -23,6 +29,8 @@ export default function MiscRowActions({ tx }: { tx: MiscRow }) {
       <MiscFormModal
         mode="edit"
         initial={tx}
+        drivers={drivers}
+        vehicles={vehicles}
         trigger={<button className="icon-btn" disabled={busy} title="編輯"><PencilLine size={14} /></button>}
       />
       <button className="icon-btn danger" onClick={handleDelete} disabled={busy} title="刪除">
