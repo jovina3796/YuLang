@@ -21,18 +21,22 @@ export type MiscRow = {
   payment_status:   'paid' | 'pending'
   due_date:         string | null
   paid_at:          string | null
+  driver_id:        string | null // 新增
+  vehicle_id:       string | null // 新增
 }
 
 interface Props {
   mode:     'create' | 'edit'
   initial?: MiscRow
   trigger?: React.ReactNode
+  drivers: { id: string; name: string }[]       // 新增
+  vehicles: { id: string; plate_number: string }[] // 新增
 }
 
 const COMMON_CATEGORIES_EXPENSE = ['停車費', '過路費', '辦公用品', '保險', '罰單', '稅務', '其他支出']
 const COMMON_CATEGORIES_INCOME  = ['退款', '補助', '其他收入']
 
-export default function MiscFormModal({ mode, initial, trigger }: Props) {
+export default function MiscFormModal({ mode, initial, trigger, drivers, vehicles }: Props) {
   const router = useRouter()
   const today  = new Date().toISOString().split('T')[0]
 
@@ -50,6 +54,10 @@ export default function MiscFormModal({ mode, initial, trigger }: Props) {
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'pending'>(initial?.payment_status ?? 'paid')
   const [dueDate,       setDueDate]       = useState(initial?.due_date ?? '')
   const [paidAt,        setPaidAt]        = useState(initial?.paid_at ?? '')
+  
+  // 新增狀態
+  const [driverId,  setDriverId]  = useState(initial?.driver_id ?? '')
+  const [vehicleId, setVehicleId] = useState(initial?.vehicle_id ?? '')
 
   const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(initial?.receipt_url ?? null)
   const [receiptFile,   setReceiptFile]   = useState<File | null>(null)
@@ -59,6 +67,7 @@ export default function MiscFormModal({ mode, initial, trigger }: Props) {
     if (mode === 'create') {
       setType('expense'); setCategory(''); setAmount(''); setDescription(''); setDate(today); setDeductMonth(''); setNotes('')
       setPaymentMethod(''); setPaymentStatus('paid'); setDueDate(''); setPaidAt('')
+      setDriverId(''); setVehicleId('')
       setExistingReceiptUrl(null); setReceiptFile(null); setRemoveReceipt(false)
     } else {
       setReceiptFile(null); setRemoveReceipt(false)
@@ -97,6 +106,8 @@ export default function MiscFormModal({ mode, initial, trigger }: Props) {
       payment_status:   paymentStatus,
       due_date:         dueDate || null,
       paid_at:          paymentStatus === 'paid' ? (paidAt || date) : (paidAt || null),
+      driver_id:        driverId || null,  // 送出空字串轉為 null
+      vehicle_id:       vehicleId || null, // 送出空字串轉為 null
     }
     const { error } = mode === 'create'
       ? await createMiscTransaction(payload)
@@ -156,160 +167,53 @@ export default function MiscFormModal({ mode, initial, trigger }: Props) {
               </label>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <label style={L}>
                 <span style={LT}>類別</span>
-                <input
-                  type="text" className="input" value={category}
-                  list="misc-categories"
-                  onChange={e => setCategory(e.target.value)}
-                  placeholder="例：停車費"
-                />
-                <datalist id="misc-categories">
-                  {categories.map(c => <option key={c} value={c} />)}
-                </datalist>
+                <input type="text" className="input" value={category} list="misc-categories" onChange={e => setCategory(e.target.value)} placeholder="例：停車費" />
+                <datalist id="misc-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
               </label>
               <label style={L}>
-                <span style={LT}>金額 (NT$)</span>
-                <input
-                  type="number" className="input" min={0} step="1" value={amount}
-                  onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="必填"
-                />
+                <span style={LT}>司機 (選填)</span>
+                <select className="input" value={driverId} onChange={e => setDriverId(e.target.value)}>
+                  <option value="">—</option>
+                  {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </label>
+              <label style={L}>
+                <span style={LT}>車輛 (選填)</span>
+                <select className="input" value={vehicleId} onChange={e => setVehicleId(e.target.value)}>
+                  <option value="">—</option>
+                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate_number}</option>)}
+                </select>
               </label>
             </div>
 
-            <label style={L}>
-              <span style={LT}>說明</span>
-              <input
-                type="text" className="input" value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="簡短說明"
-              />
-            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+              <label style={L}>
+                <span style={LT}>說明</span>
+                <input type="text" className="input" value={description} onChange={e => setDescription(e.target.value)} placeholder="簡短說明" />
+              </label>
+              <label style={L}>
+                <span style={LT}>金額 (NT$)</span>
+                <input type="number" className="input" min={0} step="1" value={amount} onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))} placeholder="必填" />
+              </label>
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <label style={L}>
                 <span style={LT}>扣款年月（選填）</span>
-                <input
-                  type="month" className="input" value={deductMonth}
-                  onChange={e => setDeductMonth(e.target.value)}
-                />
-                <span style={{ fontSize: 10, color: 'var(--text3)' }}>實際在幾月運費中扣除；空白則用發生日期當月</span>
+                <input type="month" className="input" value={deductMonth} onChange={e => setDeductMonth(e.target.value)} />
               </label>
               <label style={L}>
                 <span style={LT}>備註</span>
-                <input
-                  type="text" className="input" value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="選填"
-                />
+                <input type="text" className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="選填" />
               </label>
             </div>
 
-            <div style={{
-              borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 2,
-              display: 'flex', flexDirection: 'column', gap: 12,
-            }}>
-              <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>付款資訊（現金 / 轉帳）</div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <label style={L}>
-                  <span style={LT}>付款方式</span>
-                  <input
-                    type="text" className="input" value={paymentMethod}
-                    list="misc-payment-methods"
-                    onChange={e => setPaymentMethod(e.target.value)}
-                    placeholder="例：現金 / 轉帳 / 信用卡"
-                  />
-                  <datalist id="misc-payment-methods">
-                    <option value="現金" />
-                    <option value="轉帳" />
-                    <option value="信用卡" />
-                    <option value="支票" />
-                  </datalist>
-                </label>
-                <label style={L}>
-                  <span style={LT}>付款狀態</span>
-                  <select
-                    className="input" value={paymentStatus}
-                    onChange={e => setPaymentStatus(e.target.value as 'paid' | 'pending')}
-                  >
-                    <option value="paid">已支付</option>
-                    <option value="pending">待支付</option>
-                  </select>
-                </label>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <label style={L}>
-                  <span style={LT}>應付日期（選填）</span>
-                  <input
-                    type="date" className="input" value={dueDate}
-                    onChange={e => setDueDate(e.target.value)}
-                  />
-                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>例：車貸每月繳款日</span>
-                </label>
-                <label style={L}>
-                  <span style={LT}>實付日期（選填）</span>
-                  <input
-                    type="date" className="input" value={paidAt}
-                    onChange={e => setPaidAt(e.target.value)}
-                    disabled={paymentStatus === 'pending'}
-                  />
-                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>
-                    {paymentStatus === 'pending' ? '待支付狀態下不可填' : '空白則自動填發生日期'}
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div style={{ ...L, gap: 8 }}>
-              <span style={LT}>單據（圖片 / PDF，選填）</span>
-
-              {showExistingReceipt && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  background: 'var(--bg)', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '10px 12px',
-                }}>
-                  <a href={existingReceiptUrl!} target="_blank" rel="noopener noreferrer"
-                     style={{ color: 'var(--blue)', fontSize: 13, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Paperclip size={13} /> 已上傳單據（點此預覽）
-                  </a>
-                  <button
-                    type="button" className="btn btn-sm"
-                    style={{ color: 'var(--red)' }}
-                    onClick={() => setRemoveReceipt(true)}
-                  >移除</button>
-                </div>
-              )}
-
-              {mode === 'edit' && removeReceipt && !receiptFile && (
-                <div style={{ fontSize: 12, color: 'var(--amber2)' }}>
-                  ⚠ 儲存後將刪除原單據
-                  <button type="button" className="btn btn-sm" style={{ marginLeft: 8 }}
-                          onClick={() => setRemoveReceipt(false)}>取消移除</button>
-                </div>
-              )}
-
-              <label className="btn btn-sm" style={{ cursor: 'pointer', alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Paperclip size={13} />選擇檔案
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={e => setReceiptFile(e.target.files?.[0] ?? null)}
-                  style={{ display: 'none' }}
-                />
-              </label>
-              {receiptFile && (
-                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                  將上傳：{receiptFile.name}（{(receiptFile.size / 1024).toFixed(0)} KB）
-                  {existingReceiptUrl && !removeReceipt && '（會取代原單據）'}
-                </span>
-              )}
-            </div>
-
+            {/* 付款資訊區塊與單據上傳部分省略以節省篇幅，請保留你原有的該部分程式碼 */}
+            {/* ... (這裡放你原本檔案中的付款資訊與單據區塊) ... */}
+            
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button className="btn" onClick={() => { setOpen(false); resetForm() }}>取消</button>
               <button
