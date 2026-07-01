@@ -178,7 +178,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
 }
 
 // ============================================================================
-// 進階車趟查詢邏輯 (採用 Flex Message 美化樣式)
+// 進階車趟查詢邏輯 (採用 Flex Message 美化樣式 - 修正 TS 型別)
 // ============================================================================
 async function handleAdvancedTripQuery(replyToken: string, text: string, defaultDriverId: string, defaultDriverName: string) {
   const supabase = createServiceClient()
@@ -246,8 +246,8 @@ async function handleAdvancedTripQuery(replyToken: string, text: string, default
   const totalTrips = trips?.length || 0
   const totalFare = trips?.reduce((sum, t) => sum + Number(t.final_fare || 0), 0) || 0
 
-  // 🌟 建立 Flex Message Bubble JSON 結構
-  const flexBubble = {
+  // 🌟 建立 Flex Message Bubble JSON 結構 (加上 : any 繞過 TS 嚴格字串推論)
+  const flexBubble: any = {
     type: 'bubble',
     size: 'mega',
     header: {
@@ -262,7 +262,7 @@ async function handleAdvancedTripQuery(replyToken: string, text: string, default
           color: '#ffffff'
         }
       ],
-      backgroundColor: '#2E7D32', // 與你系統常用的深綠色搭配
+      backgroundColor: '#2E7D32',
       paddingAll: '16px'
     },
     body: {
