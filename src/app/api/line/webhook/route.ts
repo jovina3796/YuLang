@@ -7,7 +7,7 @@ import { handleTripText, looksLikeTripText } from '@/lib/line/flows/tripText'
 import { handleQueryMenu, handleTripQuery, handleFuelQuery, detectQueryKind } from '@/lib/line/flows/query'
 import { startMaintenance } from '@/lib/line/flows/maintenance'
 import { loadSession, resetSession } from '@/lib/line/session'
-import { reply, textMessage } from '@/lib/line/api'
+import { reply, textMessage, flexMessage } from '@/lib/line/api' 
 import { createServiceClient } from '@/lib/supabase/service'
 
 export const runtime = 'nodejs'
@@ -178,7 +178,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
 }
 
 // ============================================================================
-// 進階車趟查詢邏輯
+// 進階車趟查詢邏輯 (採用 Flex Message 美化樣式)
 // ============================================================================
 async function handleAdvancedTripQuery(replyToken: string, text: string, defaultDriverId: string, defaultDriverName: string) {
   const supabase = createServiceClient()
@@ -246,14 +246,87 @@ async function handleAdvancedTripQuery(replyToken: string, text: string, default
   const totalTrips = trips?.length || 0
   const totalFare = trips?.reduce((sum, t) => sum + Number(t.final_fare || 0), 0) || 0
 
-  const replyStr = 
-    `📊 【${driverDisplayName}】車趟查詢\n` +
-    `📅 查詢月份：${ymStr}\n` +
-    `----------------------\n` +
-    `🚗 完成趟次：${totalTrips} 趟\n` +
-    `💰 預估運費：NT$ ${totalFare.toLocaleString()}\n` +
-    `----------------------\n` +
-    `(※ 實際金額依最終報表結算為準)`
+  // 🌟 建立 Flex Message Bubble JSON 結構
+  const flexBubble = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      contents: [
+        {
+          type: 'text',
+          text: '📊 營運車趟統計',
+          weight: 'bold',
+          size: 'xl',
+          color: '#ffffff'
+        }
+      ],
+      backgroundColor: '#2E7D32', // 與你系統常用的深綠色搭配
+      paddingAll: '16px'
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'md',
+      paddingAll: '20px',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: '司機', size: 'sm', color: '#8c8c8c', flex: 1 },
+            { type: 'text', text: driverDisplayName, size: 'sm', color: '#111111', flex: 3, align: 'end', weight: 'bold' }
+          ]
+        },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: '月份', size: 'sm', color: '#8c8c8c', flex: 1 },
+            { type: 'text', text: ymStr, size: 'sm', color: '#111111', flex: 3, align: 'end' }
+          ]
+        },
+        {
+          type: 'separator',
+          margin: 'lg'
+        },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'lg',
+          contents: [
+            { type: 'text', text: '完成趟次', size: 'md', color: '#555555', flex: 1, gravity: 'center' },
+            { type: 'text', text: `${totalTrips} 趟`, size: 'lg', color: '#111111', flex: 2, align: 'end', weight: 'bold' }
+          ]
+        },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'md',
+          contents: [
+            { type: 'text', text: '預估運費', size: 'md', color: '#555555', flex: 1, gravity: 'center' },
+            { type: 'text', text: `NT$ ${totalFare.toLocaleString()}`, size: 'xl', color: '#d32f2f', flex: 2, align: 'end', weight: 'bold' }
+          ]
+        }
+      ]
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingTop: '0px',
+      contents: [
+        {
+          type: 'text',
+          text: '※ 實際金額依最終報表結算為準',
+          size: 'xs',
+          color: '#999999',
+          align: 'center'
+        }
+      ]
+    }
+  }
 
-  await reply(replyToken, [textMessage(replyStr)])
+  // 使用 flexMessage 回傳
+  await reply(replyToken, [flexMessage(`【${driverDisplayName}】車趟查詢結果`, flexBubble)])
 }
