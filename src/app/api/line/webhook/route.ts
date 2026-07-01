@@ -9,6 +9,7 @@ import { startMaintenance } from '@/lib/line/flows/maintenance'
 import { loadSession, resetSession } from '@/lib/line/session'
 import { reply, textMessage, flexMessage } from '@/lib/line/api' 
 import { createServiceClient } from '@/lib/supabase/service'
+import { startMisc } from '@/lib/line/flows/misc'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -133,7 +134,13 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    // 🌟 攔截進階的「車趟查詢」指令 (支援指定月份與司機)
+    // 「報帳」開頭，彈出其他收支 LIFF 表單
+    if (text && /^報帳(\s|$)/.test(text)) {
+      await startMisc(userId, replyToken)
+        return
+    }
+
+    // 攔截進階的「車趟查詢」指令 (支援指定月份與司機)
     if (text && (text.startsWith('車趟查詢') || text.startsWith('查詢車趟'))) {
       await handleAdvancedTripQuery(replyToken, text, driver.id, driver.name)
       return
