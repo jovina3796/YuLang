@@ -10,6 +10,7 @@ import { loadSession, resetSession } from '@/lib/line/session'
 import { reply, textMessage, flexMessage } from '@/lib/line/api' 
 import { createServiceClient } from '@/lib/supabase/service'
 import { startMisc } from '@/lib/line/flows/misc'
+import { sendMainMenu } from '@/lib/line/flows/menu'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -110,10 +111,10 @@ async function handleEvent(event: LineEvent): Promise<void> {
     const text = msg.type === 'text' ? msg.text.trim() : null
     const imageId = msg.type === 'image' ? msg.id : null
 
-    // 「/指令」：顯示所有可用指令（顯式請求才提示）
-    if (text === '/指令' || text === '/回報') {
-      await reply(replyToken, [textMessage(MENU_HINT)])
-      return
+    // 🌟 呼叫主選單：支援多種常見關鍵字
+    if (text && /^(選單|菜單|選項|按鈕|\/指令|\/回報|menu)$/i.test(text)) {
+      await sendMainMenu(replyToken)
+        return
     }
 
     // 「加油」開頭一律當新指令
