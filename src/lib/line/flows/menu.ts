@@ -19,7 +19,7 @@ export async function sendMainMenu(replyToken: string) {
 function createMenuCard(title: string, color: string, desc: string, buttonLabel: string, actionText: string) {
   return {
     type: 'bubble',
-    size: 'kilo',
+    size: 'nano',
     header: {
       type: 'box',
       layout: 'vertical',
