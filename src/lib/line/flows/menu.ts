@@ -4,11 +4,11 @@ export async function sendMainMenu(replyToken: string) {
   const carousel: any = {
     type: 'carousel',
     contents: [
-      createMenuCard('🚗 車趟回報', '#2E7D32', '回報每日運送趟次與站點', '回報車趟', '車趟'),
-      createMenuCard('⛽ 加油回報', '#E65100', '紀錄加油公升數與金額', '回報加油', '加油'),
-      createMenuCard('🔧 維修保養', '#1565C0', '車輛保養與維修紀錄', '回報維修', '維修'),
-      createMenuCard('🧾 金流報帳', '#5E35B1', '停車、過路費等支出', '新增報帳', '報帳'),
-      createMenuCard('📊 車趟查詢', '#424242', '查詢本月車趟與運費', '查詢當月車趟', '車趟查詢')
+      createMenuCard('車趟回報', '#2E7D32', '回報每日運送趟次與站點', '回報', '車趟'),
+      createMenuCard('加油回報', '#E65100', '紀錄加油公升數與金額', '回報', '加油'),
+      createMenuCard('維修保養', '#1565C0', '車輛保養與維修紀錄', '回報', '維修'),
+      createMenuCard('金流報帳', '#5E35B1', '停車、過路費等支出', '新增', '報帳'),
+      createMenuCard('車趟查詢', '#424242', '查詢本月車趟與運費', '查詢', '車趟查詢')
     ]
   }
 
