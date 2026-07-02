@@ -19,7 +19,7 @@ export async function sendMainMenu(replyToken: string) {
 function createMenuCard(title: string, color: string, desc: string, buttonLabel: string, actionText: string) {
   return {
     type: 'bubble',
-    size: 'small', // small 尺寸在手機上可以一次看到約 2.5 張卡片，非常適合輪播
+    size: 'kilo',
     header: {
       type: 'box',
       layout: 'vertical',
