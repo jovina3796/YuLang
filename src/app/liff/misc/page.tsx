@@ -12,7 +12,7 @@ type Config = {
 const COMMON_CATEGORIES = ['停車費', '過路費', '罰單', '車輛用品', '辦公用品', '雜支', '其他']
 
 export default function MiscLiffPage() {
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID // 確保你的 .env 有設定這個變數
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID_MISC || process.env.NEXT_PUBLIC_LIFF_ID
 
   const [stage, setStage] = useState<'init' | 'ready' | 'submitting' | 'done' | 'error'>('init')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
