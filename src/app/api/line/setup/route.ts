@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic';
 
 const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN!;
 const BASE_URL = 'https://api.line.me/v2/bot';
-const DATA_URL = 'https://api-data.line.me/v2/bot'; // 🌟 這是用來傳圖片的專屬網址
+const DATA_URL = 'https://api-data.line.me/v2/bot';
 
-// 抓取環境變數中的 LIFF ID 與網址
 const LIFF_FUEL = process.env.NEXT_PUBLIC_LIFF_ID;
 const LIFF_TRIP = process.env.NEXT_PUBLIC_LIFF_ID_TRIP;
 const LIFF_MAINTENANCE = process.env.NEXT_PUBLIC_LIFF_ID_MAINTENANCE;
@@ -31,6 +30,8 @@ export async function GET() {
       { id: 'menu-finance', file: 'menu-finance.png', name: '帳務與查詢' },
       { id: 'menu-other', file: 'menu-other.png', name: '其他項目' }
     ];
+
+    let defaultMenuId = ''; // 🌟 準備一個變數來儲存真正的 LINE ID
 
     for (const page of pages) {
       let bottomAreas: any[] = [];
@@ -70,11 +71,16 @@ export async function GET() {
         ]
       };
 
-      // 1. 建立選單框架
+      // 1. 建立選單框架，並把 LINE 產生的真實 ID 存起來
       const { data } = await axios.post(`${BASE_URL}/richmenu`, richMenu, { headers: { Authorization: `Bearer ${TOKEN}` } });
       const richMenuId = data.richMenuId;
 
-      // 2. 上傳圖片 (🌟 這裡改用 DATA_URL)
+      // 🌟 如果是日常選單，把真實 ID 記下來，最後設定預設選單會用到
+      if (page.id === 'menu-daily') {
+        defaultMenuId = richMenuId;
+      }
+
+      // 2. 上傳圖片 
       const imagePath = path.join(process.cwd(), 'img', page.file);
       const imageBuffer = fs.readFileSync(imagePath);
       await axios.post(`${DATA_URL}/richmenu/${richMenuId}/content`, imageBuffer, { 
@@ -84,14 +90,23 @@ export async function GET() {
         } 
       });
 
-      // 3. 綁定 Alias
+      // 3. 防呆機制：先刪除舊的 Alias (如果有)，避免重複報錯
+      try {
+        await axios.delete(`${BASE_URL}/richmenu/alias/${page.id}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      } catch (e) {
+        // 找不到舊的 Alias 就忽略
+      }
+
+      // 4. 重新綁定 Alias
       await axios.post(`${BASE_URL}/richmenu/alias`, { richMenuId, richMenuAliasId: page.id }, {
         headers: { Authorization: `Bearer ${TOKEN}` }
       });
     }
 
-    // 4. 設定預設選單
-    await axios.post(`${BASE_URL}/user/all/richmenu/menu-daily`, {}, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    // 5. 🌟 用正確的「真實 ID」來設定預設選單
+    if (defaultMenuId) {
+      await axios.post(`${BASE_URL}/user/all/richmenu/${defaultMenuId}`, {}, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    }
 
     return NextResponse.json({ message: '🎉 太棒了！所有分頁圖文選單已成功安裝至 LINE 官方帳號！' });
   } catch (error: any) {
