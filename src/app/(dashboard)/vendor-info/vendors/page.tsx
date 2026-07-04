@@ -39,6 +39,8 @@ export default async function VendorsTabPage({
       case 'pricing_mode': return rulesByVendor[v.id]?.[0]?.pricing_mode ?? ''
       case 'billing':      return v.billing_cycle_start_day ?? 1
       case 'contact':      return v.contact_name ?? ''
+      // 🌟 新增抽成排序判斷
+      case 'rate':         return v.default_commission_rate ?? 10
       default:             return ''
     }
   }
@@ -72,18 +74,21 @@ export default async function VendorsTabPage({
               <SortableTh field="pricing_mode" defaultField="name" defaultDir="asc">計費方式</SortableTh>
               <SortableTh field="billing" defaultField="name" defaultDir="asc">計費區間</SortableTh>
               <SortableTh field="contact" defaultField="name" defaultDir="asc">聯絡人</SortableTh>
+              {/* 🌟 新增表頭 */}
+              <SortableTh field="rate" defaultField="name" defaultDir="asc" align="right">預設抽成</SortableTh>
               <th style={{ width: 80 }}>操作</th>
             </tr>
           </thead>
           <tbody>
             {!sortedVendors.length ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>尚無資料</td></tr>
             ) : sortedVendors.map((v: any) => {
               const vRules = rulesByVendor[v.id] ?? []
               const firstRule = vRules[0]
               const pMode = firstRule ? pricingLabel(v.name, v.warehouse, firstRule.pricing_mode, PRICING_MODE) : ''
               const startDay = v.billing_cycle_start_day ?? 1
               const delay = v.payment_delay_months ?? 2
+              const rate = v.default_commission_rate != null ? Number(v.default_commission_rate) : 10
               return (
                 <tr key={v.id}>
                   <td className="name">{v.name}</td>
@@ -96,6 +101,10 @@ export default async function VendorsTabPage({
                   </td>
                   <td style={{ fontSize: 12, color: 'var(--text2)' }}>{billingPeriodLabel(startDay, delay)}</td>
                   <td>{v.contact_name ?? ''}{v.phone ? ` ${v.phone}` : ''}</td>
+                  {/* 🌟 新增抽成比例渲染 */}
+                  <td className="mono" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--accent2)' }}>
+                    {rate}%
+                  </td>
                   <td>
                     <VendorRowActions vendor={{
                       id: v.id,
@@ -107,6 +116,8 @@ export default async function VendorsTabPage({
                       display_order: v.display_order ?? null,
                       billing_cycle_start_day: v.billing_cycle_start_day ?? 1,
                       payment_delay_months:    v.payment_delay_months    ?? 2,
+                      // 🌟 傳遞數值給編輯按鈕
+                      default_commission_rate: rate,
                     }} />
                   </td>
                 </tr>
