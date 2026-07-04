@@ -3,6 +3,7 @@ import { verifyAccessToken } from '@/lib/line/profile'
 import { push, flexMessage } from '@/lib/line/api'
 import { tripSuccessBubble } from '@/lib/line/flex'
 import { calcFare } from '@/lib/fare'
+import { calculateTripCommission } from '@/lib/finance/commission'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -81,24 +82,38 @@ export async function POST(request: Request): Promise<Response> {
   const isKpiFinal = isKpiBased ? (isKpi ?? true) : null
   const isSpecialFinal = rule.special_rate ? isSpecial : false
 
+  // 1. 先算出原本的總運費
   const fare = calcFare(rule, Math.round(tripCount), actualStops ?? 0, isKpiFinal ?? false, isSpecialFinal)
 
+  // 2. 🌟 呼叫抽成計算工具，算出抽成比例 (%) 與司機實拿運費
+  const fareInfo = await calculateTripCommission(
+    driver.id,  // 司機 ID
+    vendorId,   // 廠商 ID
+    fare        // 剛剛算出的總運費
+  );
+
+  // 3. 把原本的所有欄位加上算出的抽成資料，一起寫入資料庫
   const { error: insErr } = await supabase.from('trips').insert({
-    vendor_id:        vendorId,
-    rate_rule_id:     rateRuleId,
-    driver_id:        driver.id,
-    vehicle_id:       vehicleId,
-    destination_area: destArea,
-    departed_at:      new Date(`${loggedAt}T00:00:00+08:00`).toISOString(),
-    actual_stops:     actualStops,
-    is_kpi_achieved:  isKpiFinal,
-    is_special:       isSpecialFinal,
-    calculated_fare:  fare,
-    final_fare:       fare,
-    trip_count:       Math.round(tripCount),
+    vendor_id:         vendorId,
+    rate_rule_id:      rateRuleId,
+    driver_id:         driver.id,
+    vehicle_id:        vehicleId,
+    destination_area:  destArea,
+    departed_at:       new Date(`${loggedAt}T00:00:00+08:00`).toISOString(),
+    actual_stops:      actualStops,
+    is_kpi_achieved:   isKpiFinal,
+    is_special:        isSpecialFinal,
+    calculated_fare:   fare,
+    final_fare:        fare,
+    trip_count:        Math.round(tripCount),
     notes,
-    status:           'completed',
+    status:            'completed',
+    // 👇 這裡就是新增的兩個關鍵抽成欄位！
+    commission_rate:   fareInfo.commission_rate,    // 該筆車趟適用的抽成比例 (%)
+    driver_final_fare: fareInfo.driver_final_fare,  // 扣除抽成後，司機實際應領的金額
   })
+
+  
   if (insErr) {
     console.error('[api.line.trip] insert failed', insErr)
     return Response.json({ error: 'insert_failed', detail: insErr.message }, { status: 500 })
