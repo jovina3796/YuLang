@@ -18,11 +18,12 @@ export async function GET(req: NextRequest) {
   const fromIso = from ? new Date(`${from}T00:00:00+08:00`).toISOString() : null
   const toIso   = to   ? new Date(`${to}T23:59:59.999+08:00`).toISOString() : null
 
+  // 🌟 1. 查詢語句增加撈取 commission_rate 與 driver_final_fare
   let q = supabase
     .from('trips')
     .select(`
       id, departed_at, trip_count, destination_area, actual_stops,
-      final_fare, notes, is_kpi_achieved,
+      final_fare, commission_rate, driver_final_fare, notes, is_kpi_achieved,
       vendors(name, warehouse),
       drivers(name),
       vehicles(plate_number),
@@ -40,9 +41,10 @@ export async function GET(req: NextRequest) {
     return new Response(`fetch failed: ${error.message}`, { status: 500 })
   }
 
+  // 🌟 2. CSV 表頭擴充「抽成比例(%)」與「司機實拿金額」
   const headers = [
     '日期','廠商','倉庫','業務類別','地區','趟數','司機','車號',
-    '配送點數','配送區域備註','運費','KPI達標','加成費','備註',
+    '配送點數','配送區域備註','原始總運費','抽成比例(%)','司機實拿金額','KPI達標','加成費','備註',
   ]
 
   const rows = (data ?? []).map((t: any) => {
@@ -61,6 +63,9 @@ export async function GET(req: NextRequest) {
       t.actual_stops     ?? '',
       t.destination_area ?? '',
       t.final_fare       ?? '',
+      // 🌟 3. 將資料填入對應欄位
+      t.commission_rate  ?? '',
+      t.driver_final_fare ?? '',
       t.is_kpi_achieved == null ? '' : t.is_kpi_achieved ? 'Y' : 'N',
       '',
       t.notes            ?? '',
