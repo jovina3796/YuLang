@@ -12,11 +12,17 @@ export type VendorInput = {
   display_order:           number | null
   billing_cycle_start_day: number
   payment_delay_months:    number
+  // 🌟 新增：該廠商預設抽成百分比 (如未填寫預設為 10)
+  default_commission_rate?: number | null
 }
 
 export async function createVendor(input: VendorInput) {
   const supabase = createServiceClient()
-  const { error } = await supabase.from('vendors').insert(input)
+  const payload = {
+    ...input,
+    default_commission_rate: input.default_commission_rate ?? 10.00,
+  }
+  const { error } = await supabase.from('vendors').insert(payload)
   if (error) return { error: error.message }
   revalidatePath('/vendor-info/vendors')
   return { error: null }
@@ -24,7 +30,11 @@ export async function createVendor(input: VendorInput) {
 
 export async function updateVendor(id: string, input: VendorInput) {
   const supabase = createServiceClient()
-  const { error } = await supabase.from('vendors').update(input).eq('id', id)
+  const payload = {
+    ...input,
+    default_commission_rate: input.default_commission_rate ?? 10.00,
+  }
+  const { error } = await supabase.from('vendors').update(payload).eq('id', id)
   if (error) return { error: error.message }
   revalidatePath('/vendor-info/vendors')
   return { error: null }
@@ -61,8 +71,12 @@ export async function importVendorsCsv(csvText: string): Promise<{
     const startDayStr = get('計費起算日')
     const delayStr    = get('延後月數')
     const orderStr    = get('顯示順序')
+    const rateStr     = get('預設抽成') || get('預設抽成比例')
+    
     const startDay = startDayStr ? Number(startDayStr) : 1
     const delay    = delayStr    ? Number(delayStr)    : 2
+    const rate     = rateStr     ? Number(rateStr)     : 10.00
+
     if (!Number.isFinite(startDay) || startDay < 1 || startDay > 31) {
       errors.push({ line: r + 1, reason: `計費起算日無效：${startDayStr}` }); continue
     }
@@ -80,6 +94,7 @@ export async function importVendorsCsv(csvText: string): Promise<{
         billing_cycle_start_day: startDay,
         payment_delay_months:    delay,
         display_order:           orderStr ? Number(orderStr) : null,
+        default_commission_rate: Number.isFinite(rate) ? rate : 10.00,
       },
     })
   }
