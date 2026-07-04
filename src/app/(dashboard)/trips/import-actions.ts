@@ -1,6 +1,8 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
+// 🌟 引入我們新增的抽成計算工具
+import { calculateTripCommission } from '@/lib/finance/commission'
 
 type ParsedRow = {
   line:        number
@@ -191,9 +193,26 @@ export async function importTripsCsv(csvText: string): Promise<{
 
   if (inserts.length === 0) return { ok: false, inserted: 0, errors }
 
-  const { error } = await supabase.from('trips').insert(inserts)
+  // 🌟 新增：批次處理每一筆匯入的車趟，自動抓取該司機與廠商對應的抽成 % 與金額
+  const insertsWithCommission = await Promise.all(
+    inserts.map(async (row) => {
+      const fare = row.final_fare ?? row.calculated_fare ?? 0
+      if (row.driver_id && fare > 0) {
+        const fareInfo = await calculateTripCommission(row.driver_id, row.vendor_id, fare)
+        return {
+          ...row,
+          commission_rate: fareInfo.commission_rate,
+          driver_final_fare: fareInfo.driver_final_fare,
+        }
+      }
+      return row
+    })
+  )
+
+  // 🌟 修改：將計算完成的 insertsWithCommission 寫入資料庫
+  const { error } = await supabase.from('trips').insert(insertsWithCommission)
   if (error) return { ok: false, inserted: 0, errors: [...errors, { line: 0, reason: `寫入失敗：${error.message}` }] }
 
   revalidatePath('/trips')
-  return { ok: errors.length === 0, inserted: inserts.length, errors }
+  return { ok: errors.length === 0, inserted: insertsWithCommission.length, errors }
 }
