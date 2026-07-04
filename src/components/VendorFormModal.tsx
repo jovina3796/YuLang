@@ -14,6 +14,8 @@ export type VendorRow = {
   display_order:           number | null
   billing_cycle_start_day: number
   payment_delay_months:    number
+  // 🌟 1. 補上抽成欄位，消除編譯報錯！
+  default_commission_rate?: number | null
 }
 
 interface Props {
@@ -36,11 +38,13 @@ export default function VendorFormModal({ mode, initial, trigger }: Props) {
   const [displayOrder, setDisplayOrder] = useState<number | ''>(initial?.display_order ?? '')
   const [cycleStart,   setCycleStart]   = useState<number>(initial?.billing_cycle_start_day ?? 1)
   const [payDelay,     setPayDelay]     = useState<number>(initial?.payment_delay_months ?? 2)
+  // 🌟 2. 新增預設抽成 State (預設為 10%)
+  const [commRate,     setCommRate]     = useState<number | ''>(initial?.default_commission_rate ?? 10)
 
   function resetForm() {
     if (mode === 'create') {
       setName(''); setWarehouse(''); setContactName(''); setPhone(''); setPaymentTerms(''); setDisplayOrder('')
-      setCycleStart(1); setPayDelay(2)
+      setCycleStart(1); setPayDelay(2); setCommRate(10)
     }
   }
 
@@ -55,6 +59,8 @@ export default function VendorFormModal({ mode, initial, trigger }: Props) {
       display_order:           displayOrder === '' ? null : Number(displayOrder),
       billing_cycle_start_day: Math.max(1, Math.min(28, Number(cycleStart) || 1)),
       payment_delay_months:    Math.max(0, Math.min(6,  Number(payDelay)   || 0)),
+      // 🌟 3. 將抽成比例塞入 payload 送往後端
+      default_commission_rate: commRate === '' ? 10 : Number(commRate),
     }
     setSaving(true)
     const { error } = mode === 'create'
@@ -132,13 +138,24 @@ export default function VendorFormModal({ mode, initial, trigger }: Props) {
               </label>
             </div>
 
-            <label style={L}>
-              <span style={LT}>付款條件</span>
-              <input
-                type="text" className="input" value={paymentTerms}
-                onChange={e => setPaymentTerms(e.target.value)} placeholder="例：月結 30 天"
-              />
-            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <label style={L}>
+                <span style={LT}>付款條件</span>
+                <input
+                  type="text" className="input" value={paymentTerms}
+                  onChange={e => setPaymentTerms(e.target.value)} placeholder="例：月結 30 天"
+                />
+              </label>
+              {/* 🌟 4. 在畫面上新增「預設抽成 %」輸入框 */}
+              <label style={L}>
+                <span style={LT}>預設上游抽成 (%)</span>
+                <input
+                  type="number" step="0.1" min="0" max="100" className="input" value={commRate}
+                  onChange={e => setCommRate(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="例：10"
+                />
+              </label>
+            </div>
 
             <label style={L}>
               <span style={LT}>顯示順序（數字越小越前面，留空則排最後）</span>
