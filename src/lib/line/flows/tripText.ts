@@ -11,6 +11,7 @@ import {
   type ParsedTrip,
   type TwDate,
 } from '@/lib/line/tripTextParse'
+import { calculateTripCommission } from '@/lib/finance/commission'
 
 type RateRule = FareRule & {
   id:               string
@@ -151,6 +152,13 @@ export async function handleTripText(
     const departedIso = twDateToIso(day.date)
     const vehicleId = await resolveVehicleForDriver(actingDriverId, new Date(departedIso))
     for (const rt of day.resolved) {
+      // 🌟 新增：針對每一筆解析出的車趟，動態計算該司機對該廠商的抽成與實拿金額
+      const fareInfo = await calculateTripCommission(
+        actingDriverId,    // 目前回報/指定的司機 ID
+        rt.rule.vendor_id, // 廠商 ID
+        rt.fare            // 該趟計算出的總運費
+      )
+
       tripRows.push({
         vendor_id:        rt.rule.vendor_id,
         rate_rule_id:     rt.rule.id,
@@ -166,6 +174,9 @@ export async function handleTripText(
         trip_count:       1,
         notes:            null as string | null,
         status:           'completed',
+        // 👇 新增抽成資料欄位
+        commission_rate:   fareInfo.commission_rate,
+        driver_final_fare: fareInfo.driver_final_fare,
       })
     }
   }
