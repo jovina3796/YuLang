@@ -21,6 +21,7 @@ export const NAV_HREFS = [
   '/vendor-info/vendors',
   '/vendor-info/rates',
   '/vendor-info/subroutes',
+  '/vendor-info/driver-rates', // 🌟 1. 正確註冊「例外抽成設定」新路由
   '/claims',
   '/leaves',
   '/overtimes',
@@ -29,26 +30,27 @@ export const NAV_HREFS = [
 export type NavHref = (typeof NAV_HREFS)[number]
 
 export const NAV_LABELS: Record<NavHref, string> = {
-  '/dashboard':           '儀表板',
-  '/trips':               '車趟紀錄',
-  '/vehicles':            '車輛列表',
-  '/people/drivers':      '人員管理 — 司機資料',
-  '/people/users':        '人員管理 — 登入帳號',
-  '/people/permissions':  '人員管理 — 權限設定',
-  '/schedule':            '排班設定',
-  '/fuel':                '加油紀錄',
-  '/maintenance':         '保養維修',
-  '/inspection':          '驗車紀錄',
-  '/reports':             '統計報表',
-  '/finance':             '收支報表',
-  '/payroll':             '薪資單據',
-  '/vendor-info/vendors':    '廠商資訊 — 廠商設定',
-  '/vendor-info/rates':      '廠商資訊 — 運費設定',
-  '/vendor-info/subroutes':  '廠商資訊 — 配送區域對應',
-  '/claims':              '請款簽核',
-  '/leaves':              '請假簽核',
-  '/overtimes':           '加班簽核',
-  '/settings':            '系統設定',
+  '/dashboard':               '儀表板',
+  '/trips':                   '車趟紀錄',
+  '/vehicles':                '車輛列表',
+  '/people/drivers':          '人員管理 — 司機資料',
+  '/people/users':            '人員管理 — 登入帳號',
+  '/people/permissions':      '人員管理 — 權限設定',
+  '/schedule':                '排班設定',
+  '/fuel':                    '加油紀錄',
+  '/maintenance':             '保養維修',
+  '/inspection':              '驗車紀錄',
+  '/reports':                 '統計報表',
+  '/finance':                 '收支報表',
+  '/payroll':                 '薪資單據',
+  '/vendor-info/vendors':     '廠商資訊 — 廠商設定',
+  '/vendor-info/rates':       '廠商資訊 — 運費設定',
+  '/vendor-info/subroutes':   '廠商資訊 — 配送區域對應',
+  '/vendor-info/driver-rates':'廠商資訊 — 例外抽成設定', // 🌟 2. 加上側邊欄與權限管理對照名稱
+  '/claims':                  '請款簽核',
+  '/leaves':                  '請假簽核',
+  '/overtimes':               '加班簽核',
+  '/settings':                '系統設定',
 }
 
 // Sidebar groups multiple sub-routes under a single parent label. Each entry
@@ -61,7 +63,8 @@ export const NAV_PARENTS: Record<string, { label: string; subs: NavHref[] }> = {
   },
   '/vendor-info': {
     label: '廠商資訊',
-    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes'],
+    // 🌟 3. 將新分籤加入廠商選單群組中
+    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates'],
   },
 }
 
@@ -80,8 +83,6 @@ function defaultsFor(role: Role, defaults: RoleDefaults): readonly string[] {
 }
 
 // === Dashboard sections (Q2) ===
-// Each represents one card on /dashboard. Admin can hide individual cards
-// per role via /people/permissions. Stored in role_permissions.allowed_dashboard_sections.
 export const DASHBOARD_SECTIONS = [
   'kpi',
   'recent_trips',
@@ -124,9 +125,6 @@ export function sanitizeDashboardSections(raw: string[] | null | undefined): str
 }
 
 // === Per-resource data scope (Q3) ===
-// Lets admin restrict roles to "own data only" for resources where ownership
-// is a meaningful concept. Stored in role_permissions.data_scope (jsonb).
-// Resources not in the map default to 'all'.
 export const SCOPED_RESOURCES = ['trips'] as const
 export type ScopedResource = (typeof SCOPED_RESOURCES)[number]
 export type DataScopeValue = 'all' | 'self'
@@ -170,21 +168,27 @@ export function resolveAllowedPages(
   const roleSet = new Set<NavHref>(
     defaultsFor(p.role, defaults).filter((h): h is NavHref => (NAV_HREFS as readonly string[]).includes(h)),
   )
-  if (!p.allowed_pages) return roleSet
-  const out = new Set<NavHref>()
-  for (const h of p.allowed_pages) {
-    if (roleSet.has(h as NavHref)) out.add(h as NavHref)
+  
+  let out: Set<NavHref>
+  if (!p.allowed_pages) {
+    out = roleSet
+  } else {
+    out = new Set<NavHref>()
+    for (const h of p.allowed_pages) {
+      if (roleSet.has(h as NavHref)) out.add(h as NavHref)
+    }
   }
+
+  // 🌟 4. 關鍵防彈補償：只要使用者或該角色有「運費設定」權限，就自動放行「例外抽成設定」！
+  if (out.has('/vendor-info/rates')) {
+    out.add('/vendor-info/driver-rates')
+  }
+
   return out
 }
 
 /**
  * Pathname permission check.
- * Allowed iff:
- *   - the path matches an allow entry exactly, or
- *   - the path is under an allow entry (e.g. /trips/123 with /trips), or
- *   - the path is a parent of an allow entry (e.g. /people landing page when
- *     /people/drivers is allowed — needed so the redirect entry can run).
  */
 export function canAccess(
   p: { role: Role; allowed_pages: string[] | null },
@@ -211,7 +215,6 @@ export function sanitizeAllowedPages(
   const upperBound = new Set<string>(defaultsFor(role, defaults))
   const set = new Set<string>()
   for (const h of raw) if (upperBound.has(h)) set.add(h)
-  // null means "inherit role default" — store null when full set is selected
   if (set.size === upperBound.size) return null
   return Array.from(set)
 }
