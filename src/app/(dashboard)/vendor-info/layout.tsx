@@ -1,5 +1,4 @@
 import { headers } from 'next/headers'
-import { Building2, Tags, MapPinned } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/auth'
 import { loadRolePermissions } from '@/lib/rolePermissions.server'
 import { resolveAllowedPages } from '@/lib/permissions'
