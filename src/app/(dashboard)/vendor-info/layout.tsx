@@ -4,8 +4,9 @@ import { getCurrentProfile } from '@/lib/auth'
 import { loadRolePermissions } from '@/lib/rolePermissions.server'
 import { resolveAllowedPages } from '@/lib/permissions'
 import SubNavTabs from '@/components/SubNavTabs'
+import { Building2, Tags, MapPinned, Percent } from 'lucide-react'
 
-type Key = 'vendors' | 'rates' | 'subroutes'
+type Key = 'vendors' | 'rates' | 'subroutes' | 'driver-rates'
 
 export default async function VendorInfoLayout({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile()
@@ -16,14 +17,16 @@ export default async function VendorInfoLayout({ children }: { children: React.R
 
   const pathname = (await headers()).get('x-pathname') ?? ''
   const activeKey: Key =
-    pathname.startsWith('/vendor-info/rates')     ? 'rates' :
-    pathname.startsWith('/vendor-info/subroutes') ? 'subroutes' :
+    pathname.startsWith('/vendor-info/rates')        ? 'rates' :
+    pathname.startsWith('/vendor-info/subroutes')    ? 'subroutes' :
+    pathname.startsWith('/vendor-info/driver-rates') ? 'driver-rates' :
     'vendors'
 
   const tabs = [
-    { key: 'vendors'   as const, label: '廠商設定',     icon: <Building2 size={14} strokeWidth={1.8} />, href: '/vendor-info/vendors',   hidden: !allowed.has('/vendor-info/vendors') },
-    { key: 'rates'     as const, label: '運費設定',     icon: <Tags size={14} strokeWidth={1.8} />,      href: '/vendor-info/rates',     hidden: !allowed.has('/vendor-info/rates') },
-    { key: 'subroutes' as const, label: '配送區域對應', icon: <MapPinned size={14} strokeWidth={1.8} />, href: '/vendor-info/subroutes', hidden: !allowed.has('/vendor-info/subroutes') },
+    { key: 'vendors'      as const, label: '廠商設定',     icon: <Building2 size={14} strokeWidth={1.8} />, href: '/vendor-info/vendors',      hidden: !allowed.has('/vendor-info/vendors') },
+    { key: 'rates'        as const, label: '運費設定',     icon: <Tags size={14} strokeWidth={1.8} />,      href: '/vendor-info/rates',        hidden: !allowed.has('/vendor-info/rates') },
+    { key: 'subroutes'    as const, label: '配送區域對應', icon: <MapPinned size={14} strokeWidth={1.8} />, href: '/vendor-info/subroutes',    hidden: !allowed.has('/vendor-info/subroutes') },
+    { key: 'driver-rates' as const, label: '例外抽成設定', icon: <Percent size={14} strokeWidth={1.8} />,   href: '/vendor-info/driver-rates', hidden: !allowed.has('/vendor-info/rates') },
   ]
 
   return (
