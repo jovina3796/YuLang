@@ -6,7 +6,7 @@ export default async function DriverRatesTabPage() {
   const supabase = createServiceClient()
 
   // 同時抓取例外清單、啟用中的司機、以及所有廠商清單
-  const [{ data: rates }, { data: drivers }, { data: vendors }] = await Promise.all([
+  const [{ data: rates, error: ratesError }, { data: drivers }, { data: vendors }] = await Promise.all([
     supabase
       .from('driver_vendor_rates')
       .select('id, driver_id, vendor_id, commission_rate, updated_at, drivers(name), vendors(name, warehouse)')
@@ -14,6 +14,15 @@ export default async function DriverRatesTabPage() {
     supabase.from('drivers').select('id, name').eq('status', 'active').order('name'),
     supabase.from('vendors').select('id, name, warehouse').order('name'),
   ])
+
+  // 萬一 SQL 查詢出錯，至少在畫面上印出錯誤訊息，絕對不再一片空白！
+  if (ratesError) {
+    return (
+      <div className="card" style={{ padding: 24, color: 'var(--red)' }}>
+        讀取資料失敗：{ratesError.message}
+      </div>
+    )
+  }
 
   const driverOptions = drivers ?? []
   const vendorOptions = vendors ?? []
@@ -48,17 +57,26 @@ export default async function DriverRatesTabPage() {
               const vName = r.vendors?.name ?? '未知廠商'
               const vWh   = r.vendors?.warehouse ? `／${r.vendors?.warehouse}` : ''
               const dateStr = r.updated_at ? new Date(r.updated_at).toLocaleDateString('zh-TW') : ''
+              
+              // 🌟 核心防護：不管資料庫傳回字串還是 null，一律強制安全轉為數字！
+              const safeRate = Number(r.commission_rate) || 0
+
               return (
                 <tr key={r.id}>
                   <td className="name" style={{ fontWeight: 600 }}>{r.drivers?.name ?? '未知司機'}</td>
                   <td><span className="badge badge-blue">{vName}{vWh}</span></td>
                   <td className="mono" style={{ textAlign: 'right', color: 'var(--accent2)', fontWeight: 700, fontSize: 14 }}>
-                    {Number(r.commission_rate)}%
+                    {safeRate}%
                   </td>
                   <td className="mono" style={{ textAlign: 'right', fontSize: 12, color: 'var(--text3)' }}>{dateStr}</td>
                   <td>
                     <DriverVendorRateRowActions
-                      row={{ id: r.id, driver_id: r.driver_id, vendor_id: r.vendor_id, commission_rate: r.commission_rate }}
+                      row={{ 
+                        id: r.id, 
+                        driver_id: r.driver_id ?? '', 
+                        vendor_id: r.vendor_id ?? '', 
+                        commission_rate: safeRate // 🌟 傳遞確保為 number 型別的安全數值
+                      }}
                       drivers={driverOptions}
                       vendors={vendorOptions}
                     />
