@@ -3,8 +3,7 @@ import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { deleteDriverVendorRate } from '@/app/(dashboard)/vendor-info/driver-rates/actions'
-import DriverVendorRateModal from './DriverVendorRateModal'
-import type { DriverOption, VendorOption, RateRow } from './DriverVendorRateModal'
+import DriverVendorRateModal, { type DriverOption, type VendorOption, type RateRow } from './DriverVendorRateModal'
 
 interface Props {
   row:     RateRow
