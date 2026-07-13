@@ -50,7 +50,23 @@ const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
 
 export function looksLikeTripText(text: string): boolean {
   const stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
-  return DATE_TOKEN_RE.test(stripped)
+  
+  // 1. 如果開頭有標準日期，絕對是報趟
+  if (DATE_TOKEN_RE.test(stripped)) return true
+
+  // 2. 如果沒日期，但直接打「休」或「休息」
+  if (/^(休|休息|休假)$/.test(stripped)) return true
+
+  // 3. 如果沒日期，我們檢查這是不是「其他系統已知指令」
+  const firstWord = stripped.split(/\s+/)[0]
+  const isSystemCommand = /^(選單|菜單|選項|按鈕|\/|menu|加油|車趟|維修|保養|報帳|查詢|車趟查詢)/i.test(firstWord)
+
+  // 只要「不是」系統指令，我們就大膽假設它是「省略日期的車趟」，放行給解析器去比對！
+  if (!isSystemCommand) {
+    return true 
+  }
+
+  return false
 }
 
 function extractAssignedDriver(text: string): { name: string; remaining: string } | null {
