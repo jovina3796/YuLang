@@ -22,11 +22,12 @@ type LineMessage =
   | { type: 'image'; id: string }
   | { type: 'video' | 'audio' | 'file' | 'location' | 'sticker'; id: string }
 
+// 🌟 擴充 LineEvent 型別，支援 join 事件與群組 ID
 type LineEvent =
   | {
       type: 'message'
       replyToken: string
-      source: { type: string; userId?: string }
+      source: { type: string; userId?: string; groupId?: string; roomId?: string }
       message: LineMessage
     }
   | {
@@ -38,7 +39,12 @@ type LineEvent =
       type: 'unfollow'
       source: { type: string; userId?: string }
     }
-  | { type: string; replyToken?: string; source?: { userId?: string } }
+  | {
+      type: 'join'
+      replyToken: string
+      source: { type: string; groupId?: string; roomId?: string }
+    }
+  | { type: string; replyToken?: string; source?: { userId?: string; groupId?: string; roomId?: string } }
 
 export async function POST(request: Request): Promise<Response> {
   const rawBody = await request.text()
@@ -66,18 +72,67 @@ export async function GET(): Promise<Response> {
   return new Response('LINE webhook OK', { status: 200 })
 }
 
+// 🌟 共用函式：註冊群組與發送自訂歡迎詞
+async function registerGroupAndWelcome(groupId: string, defaultName: string, replyToken: string) {
+  const supabase = createServiceClient();
+  let groupName = defaultName;
+
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/group/${groupId}/summary`, {
+      headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      groupName = data.groupName || groupName;
+    }
+  } catch (err) {
+    console.error('[line.group] 無法取得群組名稱', err);
+  }
+
+  const { error } = await supabase.from('line_groups').upsert({
+    line_group_id: groupId,
+    name: groupName,
+    reminder_enabled: true
+  }, { onConflict: 'line_group_id' });
+
+  if (error) {
+    await reply(replyToken, [textMessage(`❌ 群組綁定失敗：${error.message}`)]);
+    return;
+  }
+
+  const { data: setting } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'group_welcome_msg')
+    .single();
+
+  const template = setting?.value || '大家好！我是車趟小幫手 🤖\n已成功綁定群組「{GroupName}」！\n系統每晚將會在此群組發送報趟提醒喔！🚗';
+  const finalMessage = template.replace(/{GroupName}/g, groupName);
+
+  await reply(replyToken, [textMessage(finalMessage)]);
+}
+
 async function handleEvent(event: LineEvent): Promise<void> {
   try {
-    const userId = event.source?.userId
-    if (!userId) return
+    const source = event.source as any;
+    const userId = source?.userId;
+    const replyToken = (event as { replyToken?: string }).replyToken;
 
     if (event.type === 'unfollow') {
-      await resetSession(userId)
+      if (userId) await resetSession(userId)
       return
     }
 
-    const replyToken = (event as { replyToken?: string }).replyToken
     if (!replyToken) return
+
+    // 🌟 1. 攔截「加入群組」事件 (join)
+    if (event.type === 'join') {
+      const groupId = source.groupId || source.roomId;
+      if (groupId) {
+        await registerGroupAndWelcome(groupId, '未命名群組', replyToken);
+      }
+      return;
+    }
 
     if (event.type === 'follow') {
       const driver = await findDriverByLineUserId(userId)
@@ -91,6 +146,23 @@ async function handleEvent(event: LineEvent): Promise<void> {
 
     if (event.type !== 'message') return
     const msg = (event as Extract<LineEvent, { type: 'message' }>).message
+    const text = msg.type === 'text' ? msg.text.trim() : null
+    const imageId = msg.type === 'image' ? msg.id : null
+
+    // 🌟 2. 攔截群組手動綁定指令 (放在最前面，避免非司機成員被擋)
+    if (text && text.startsWith('/綁定群組')) {
+      const groupId = source.groupId || source.roomId;
+      if (!groupId) {
+        await reply(replyToken, [textMessage('❌ 此指令只能在 LINE 群組或多人聊天室中使用喔！')]);
+        return;
+      }
+      const customName = text.replace('/綁定群組', '').trim() || '未命名群組';
+      await registerGroupAndWelcome(groupId, customName, replyToken);
+      return;
+    }
+
+    // 若非群組註冊指令，則必須要有 userId 才能進行後續操作
+    if (!userId) return
 
     const driver = await findDriverByLineUserId(userId)
     const session = await loadSession(userId)
@@ -110,10 +182,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
     }
 
     // 已綁定
-    const text = msg.type === 'text' ? msg.text.trim() : null
-    const imageId = msg.type === 'image' ? msg.id : null
-
-    // 🌟 呼叫主選單：支援多種常見關鍵字 (群組內也可用)
+    // 呼叫主選單：支援多種常見關鍵字 (群組內也可用)
     if (text && /^(選單|菜單|選項|按鈕|\/指令|\/回報|menu)$/i.test(text)) {
       await sendMainMenu(replyToken)
       return
@@ -137,13 +206,13 @@ async function handleEvent(event: LineEvent): Promise<void> {
       return
     }
 
-    // 🌟 「報帳」開頭，彈出其他收支 LIFF 表單
+    // 「報帳」開頭，彈出其他收支 LIFF 表單
     if (text && /^報帳(\s|$)/.test(text)) {
       await startMisc(userId, replyToken)
       return
     }
 
-    // 🌟 攔截進階的「車趟查詢」指令 (支援指定月份與司機)
+    // 攔截進階的「車趟查詢」指令 (支援指定月份與司機)
     if (text && (text.startsWith('車趟查詢') || text.startsWith('查詢車趟'))) {
       await handleAdvancedTripQuery(replyToken, text, driver.id, driver.name)
       return
