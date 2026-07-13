@@ -21,7 +21,8 @@ export const NAV_HREFS = [
   '/vendor-info/vendors',
   '/vendor-info/rates',
   '/vendor-info/subroutes',
-  '/vendor-info/driver-rates', // 🌟 1. 正確註冊「例外抽成設定」新路由
+  '/vendor-info/driver-rates',
+  '/vendor-info/surcharges',
   '/claims',
   '/leaves',
   '/overtimes',
@@ -46,7 +47,8 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/vendor-info/vendors':     '廠商資訊 — 廠商設定',
   '/vendor-info/rates':       '廠商資訊 — 運費設定',
   '/vendor-info/subroutes':   '廠商資訊 — 配送區域對應',
-  '/vendor-info/driver-rates':'廠商資訊 — 例外抽成設定', // 🌟 2. 加上側邊欄與權限管理對照名稱
+  '/vendor-info/driver-rates':'廠商資訊 — 例外抽成設定', 
+  '/vendor-info/surcharges':   '廠商資訊 — 特殊加成設定',
   '/claims':                  '請款簽核',
   '/leaves':                  '請假簽核',
   '/overtimes':               '加班簽核',
@@ -63,8 +65,7 @@ export const NAV_PARENTS: Record<string, { label: string; subs: NavHref[] }> = {
   },
   '/vendor-info': {
     label: '廠商資訊',
-    // 🌟 3. 將新分籤加入廠商選單群組中
-    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates'],
+    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates', '/vendor-info/surcharges'],
   },
 }
 
@@ -179,9 +180,9 @@ export function resolveAllowedPages(
     }
   }
 
-  // 🌟 4. 關鍵防彈補償：只要使用者或該角色有「運費設定」權限，就自動放行「例外抽成設定」！
   if (out.has('/vendor-info/rates')) {
     out.add('/vendor-info/driver-rates')
+    out.add('/vendor-info/surcharges')
   }
 
   return out
