@@ -17,7 +17,7 @@ export default async function VendorSurchargesTabPage() {
   const vendorOptions = vendors ?? []
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div style={{ maxWidth: 1000 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <VendorSurchargeModal mode="create" vendors={vendorOptions} />
       </div>
