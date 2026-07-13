@@ -23,6 +23,7 @@ export const NAV_HREFS = [
   '/vendor-info/subroutes',
   '/vendor-info/driver-rates',
   '/vendor-info/surcharges',
+  '/vendor-info/reminders',
   '/claims',
   '/leaves',
   '/overtimes',
@@ -49,6 +50,7 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/vendor-info/subroutes':   '廠商資訊 — 配送區域對應',
   '/vendor-info/driver-rates':'廠商資訊 — 例外抽成設定', 
   '/vendor-info/surcharges':   '廠商資訊 — 特殊加成設定',
+  '/vendor-info/reminders':     '廠商資訊 — 定時提醒管理',
   '/claims':                  '請款簽核',
   '/leaves':                  '請假簽核',
   '/overtimes':               '加班簽核',
@@ -65,7 +67,7 @@ export const NAV_PARENTS: Record<string, { label: string; subs: NavHref[] }> = {
   },
   '/vendor-info': {
     label: '廠商資訊',
-    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates', '/vendor-info/surcharges'],
+    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates', '/vendor-info/surcharges', '/vendor-info/reminders'],
   },
 }
 
@@ -183,6 +185,7 @@ export function resolveAllowedPages(
   if (out.has('/vendor-info/rates')) {
     out.add('/vendor-info/driver-rates')
     out.add('/vendor-info/surcharges')
+    out.add('/vendor-info/reminders')
   }
 
   return out
