@@ -5,7 +5,7 @@ import { resolveAllowedPages } from '@/lib/permissions'
 import SubNavTabs from '@/components/SubNavTabs'
 import { Building2, Tags, MapPinned, Percent } from 'lucide-react'
 
-type Key = 'vendors' | 'rates' | 'subroutes' | 'driver-rates' | 'surcharges'
+type Key = 'vendors' | 'rates' | 'subroutes' | 'driver-rates' | 'surcharges' | 'reminders'
 
 export default async function VendorInfoLayout({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile()
@@ -20,6 +20,7 @@ export default async function VendorInfoLayout({ children }: { children: React.R
     pathname.startsWith('/vendor-info/subroutes')    ? 'subroutes' :
     pathname.startsWith('/vendor-info/driver-rates') ? 'driver-rates' :
     pathname.startsWith('/vendor-info/surcharges')    ? 'surcharges' :
+    pathname.startsWith('/vendor-info/reminders')    ? 'reminders' :
     'vendors'
 
   const tabs = [
@@ -28,6 +29,8 @@ export default async function VendorInfoLayout({ children }: { children: React.R
     { key: 'subroutes'    as const, label: '配送區域對應', icon: <MapPinned size={14} strokeWidth={1.8} />, href: '/vendor-info/subroutes',    hidden: !allowed.has('/vendor-info/subroutes') },
     { key: 'driver-rates' as const, label: '例外抽成設定', icon: <Percent size={14} strokeWidth={1.8} />,   href: '/vendor-info/driver-rates', hidden: !allowed.has('/vendor-info/rates') },
     { key: 'surcharges'   as const, label: '特殊加成設定', icon: <Percent size={14} strokeWidth={1.8} />,   href: '/vendor-info/surcharges',    hidden: !allowed.has('/vendor-info/rates') },
+    { key: 'reminders' as const, label: '定時提醒管理', icon: <BellRing size={14} strokeWidth={1.8} />, href: '/vendor-info/reminders', hidden: !allowed.has('/vendor-info/rates') 
+  },
   ]
 
   return (
