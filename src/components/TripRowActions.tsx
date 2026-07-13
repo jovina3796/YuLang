@@ -23,6 +23,7 @@ interface Props {
   rateRules: RateRule[]
   drivers:   Driver[]
   vehicles:  Vehicle[]
+  surcharges: any[]
 }
 
 export default function TripRowActions({ trip, vendors, rateRules, drivers, vehicles }: Props) {
@@ -47,6 +48,7 @@ export default function TripRowActions({ trip, vendors, rateRules, drivers, vehi
         vehicles={vehicles}
         mode="edit"
         initial={trip}
+        surcharges={surcharges}
         trigger={<button className="icon-btn" disabled={busy} title="編輯"><PencilLine size={14} /></button>}
       />
       <button className="icon-btn danger" onClick={handleDelete} disabled={busy} title="刪除">
