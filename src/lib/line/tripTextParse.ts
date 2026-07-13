@@ -126,11 +126,18 @@ export function parseTripText(text: string, services: string[], validSurcharges:
     if (tokens.length < 2) {
       return { kind: 'error', message: `${prefix}訊息過短，需要：日期 + 至少一筆車趟（或「休息」）` }
     }
-    const date = parseDateToken(tokens[0])
-    if (!date) {
-      return { kind: 'error', message: `${prefix}日期格式錯誤：「${tokens[0]}」（可用 今天 / N號 / M月N日 / M/N）` }
+    let date = parseDateToken(tokens[0])
+    let rest: string[]
+
+    if (date) {
+      // 情況 A：有明確輸入日期 (例：今天 低鮮5) -> 切掉第一個字，留下車趟
+      rest = tokens.slice(1)
+    } else {
+      // 情況 B：沒有輸入日期 (例：低鮮5) -> 強制預設為「今天」，且所有文字都是車趟
+      date = parseDateToken('今天')!
+      rest = tokens
     }
-    const rest = tokens.slice(1)
+    
     if (rest.some(t => REST_TOKENS.has(t))) {
       if (rest.length !== 1) {
         return { kind: 'error', message: `${prefix}「休息」需單獨出現，無法與車趟混用` }
