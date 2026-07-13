@@ -93,11 +93,11 @@ export default function VendorSurchargeModal({ mode, vendors, initial }: Props) 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <label style={L}>
                 <span style={LT}>加成比例 (%)</span>
-                <input type="number" step="1" className="input" value={ratePct} onChange={e => setRatePct(e.target.value === '' ? '' : Number(e.target.value))} placeholder="例：30" />
+                <input type="number" step="1" className="input" style={{ width: '100%', boxSizing: 'border-box', minWidth: 0 }} value={ratePct} onChange={e => setRatePct(e.target.value === '' ? '' : Number(e.target.value))} placeholder="例：30" />
               </label>
               <label style={L}>
                 <span style={LT}>顯示順序</span>
-                <input type="number" className="input" value={order} onChange={e => setOrder(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="input" style={{ width: '100%', boxSizing: 'border-box', minWidth: 0 }} value={order} onChange={e => setOrder(e.target.value === '' ? '' : Number(e.target.value))} />
               </label>
             </div>
 
