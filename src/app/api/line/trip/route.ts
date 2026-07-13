@@ -82,14 +82,14 @@ export async function POST(request: Request): Promise<Response> {
   const isKpiFinal = isKpiBased ? (isKpi ?? true) : null
   const isSpecialFinal = rule.special_rate ? isSpecial : false
 
-  // 1. 先算出原本的總運費
-  const fare = calcFare(rule, Math.round(tripCount), actualStops ?? 0, isKpiFinal ?? false, isSpecialFinal)
+  // 1. 🌟 解構出最終運費數字 (finalFare)
+  const { finalFare } = calcFare(rule, Math.round(tripCount), actualStops ?? 0, isKpiFinal ?? false, isSpecialFinal)
 
-  // 2. 🌟 呼叫抽成計算工具，算出抽成比例 (%) 與司機實拿運費
+  // 2. 🌟 呼叫抽成計算工具，算出抽成比例 (%) 與司機實拿運費 (傳入 finalFare)
   const fareInfo = await calculateTripCommission(
     driver.id,  // 司機 ID
     vendorId,   // 廠商 ID
-    fare        // 剛剛算出的總運費
+    finalFare   // 剛剛算出的總運費
   );
 
   // 3. 把原本的所有欄位加上算出的抽成資料，一起寫入資料庫
@@ -103,8 +103,8 @@ export async function POST(request: Request): Promise<Response> {
     actual_stops:      actualStops,
     is_kpi_achieved:   isKpiFinal,
     is_special:        isSpecialFinal,
-    calculated_fare:   fare,
-    final_fare:        fare,
+    calculated_fare:   finalFare, // 🌟 更新寫入 finalFare
+    final_fare:        finalFare, // 🌟 更新寫入 finalFare
     trip_count:        Math.round(tripCount),
     notes,
     status:            'completed',
@@ -136,11 +136,11 @@ export async function POST(request: Request): Promise<Response> {
       service:    (rule as { service_type: string | null }).service_type,
       trip_count: Math.round(tripCount),
       stops:      actualStops,
-      fare,
+      fare:       finalFare, // 🌟 更新推播 finalFare
       is_kpi:     isKpiFinal,
       is_special: isSpecialFinal,
     })),
   ])
 
-  return Response.json({ ok: true, fare })
+  return Response.json({ ok: true, fare: finalFare }) // 🌟 更新回傳 finalFare
 }
