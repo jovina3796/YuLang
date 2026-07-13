@@ -66,7 +66,7 @@ export default function VendorSurchargeModal({ mode, vendors, initial }: Props) 
           style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={e => e.target === e.currentTarget && (setOpen(false), resetForm())}
         >
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 14, width: '100%', maxWidth: 440, padding: '28px 28px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 14, width: '100%', maxWidth: 440, padding: '28px 28px 24px', display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>
               {mode === 'create' ? '新增廠商特殊加成方案' : '修改特殊加成方案'}
             </div>
