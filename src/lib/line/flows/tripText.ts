@@ -48,34 +48,14 @@ const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2
 // 🌟 新增：允許使用 + 號作為「今天」的極短快捷鍵
 const QUICK_TODAY_RE = /^\+(\s*)/
 
-export function looksLikeTripText(text: string): boolean {
-  const stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
-  // 🌟 只要是日期開頭，或是 + 號開頭，才放行進入報趟解析器
-  return DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)
-}
-
 const ASSIGN_DRIVER_HEAD_RE = /^指定司機[：:]\s*(\S+)\s+/
 const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
 
+// 🌟 確保整份檔案只有這「唯一一個」 looksLikeTripText 函式
 export function looksLikeTripText(text: string): boolean {
   const stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
-  
-  // 1. 如果開頭有標準日期，絕對是報趟
-  if (DATE_TOKEN_RE.test(stripped)) return true
-
-  // 2. 如果沒日期，但直接打「休」或「休息」
-  if (/^(休|休息|休假)$/.test(stripped)) return true
-
-  // 3. 如果沒日期，我們檢查這是不是「其他系統已知指令」
-  const firstWord = stripped.split(/\s+/)[0]
-  const isSystemCommand = /^(選單|菜單|選項|按鈕|\/|menu|加油|車趟|維修|保養|報帳|查詢|車趟查詢)/i.test(firstWord)
-
-  // 只要「不是」系統指令，我們就大膽假設它是「省略日期的車趟」，放行給解析器去比對！
-  if (!isSystemCommand) {
-    return true 
-  }
-
-  return false
+  // 只要是日期開頭，或是 + 號開頭，才放行進入報趟解析器
+  return DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)
 }
 
 function extractAssignedDriver(text: string): { name: string; remaining: string } | null {
@@ -195,7 +175,6 @@ export async function handleTripText(
       }
 
       // 🌟 呼叫剛升級的核心計價引擎（傳入颱風假等方案的加成比例）
-      // 注意：這裡只算最終總金額，因為稍後還要計算每個司機自己的例外抽成
       const { finalFare } = calcFare(
         r.rule, 
         1, 
