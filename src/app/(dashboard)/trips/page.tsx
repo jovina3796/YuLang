@@ -9,8 +9,6 @@ import { resolvePageWindow } from '@/lib/pagination'
 import { Check } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/auth'
 import { loadScopeFor } from '@/lib/rolePermissions.server'
-
-// 🌟 新增：我們需要一個簡單的下拉選單元件來篩選司機
 import DriverFilter from '@/components/DriverFilter' 
 
 export default async function TripsPage({ searchParams }: { searchParams: Promise<any> }) {
@@ -57,17 +55,21 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
     { data: rateRules },
     { data: drivers },
     { data: vehicles },
+    { data: surcharges },
   ] = await Promise.all([
     tripsQuery,
     supabase.from('vendors').select('id, name, warehouse').order('name'),
     supabase.from('vendor_rate_rules').select('*').eq('is_active', true),
     supabase.from('drivers').select('id, name').eq('status', 'active').order('name'),
     supabase.from('vehicles').select('id, plate_number').order('plate_number'),
+    supabase.from('vendor_surcharges').select('id, vendor_id, name, rate').eq('is_active', true), 
   ])
 
-  // ... (getSortKey 與 sortedTrips 排序邏輯保持不變) ...
-
+  // 排序邏輯與統計
   const totalRows = trips?.length ?? 0
+  const totalTrips = trips?.reduce((s: number, t: any) => s + Number(t.trip_count ?? 0), 0) ?? 0
+  const totalFare  = trips?.reduce((s: number, t: any) => s + Number(t.final_fare  ?? 0), 0) ?? 0
+
   const win = resolvePageWindow(totalRows, pageRaw, pageSizeRaw)
   const pageTrips = trips?.slice(win.startIdx, win.endIdx) ?? []
 
@@ -75,19 +77,47 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <TripDateFilter vendors={vendors ?? []} />
-        {/* 🌟 新增：司機篩選器 */}
+        {/* 🌟 司機篩選器 */}
         <DriverFilter drivers={drivers ?? []} /> 
         
         <div style={{ flex: 1 }} />
         {!scopedToSelf && (
-          <TripFormModal
-            vendors={vendors ?? []}
-            rateRules={rateRules ?? []}
-            drivers={drivers ?? []}
-            vehicles={vehicles ?? []}
-            mode="create"
-          />
+          <>
+            <TripImportExport />
+            <TripFormModal
+              vendors={vendors ?? []}
+              rateRules={rateRules ?? []}
+              drivers={drivers ?? []}
+              vehicles={vehicles ?? []}
+              surcharges={surcharges ?? []} // 🌟 記得傳入！
+              mode="create"
+            />
+          </>
         )}
+      </div>
+
+      {/* 🌟 補回統計資訊欄位 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 18, marginBottom: 12,
+        padding: '8px 14px',
+        background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8,
+        fontSize: 13, color: 'var(--text2)',
+      }}>
+        <span>
+          車趟：<span style={{ fontFamily: 'var(--mono)', color: 'var(--accent2)', fontWeight: 700 }}>
+            {totalTrips.toLocaleString()}
+          </span> 趟
+        </span>
+        <span style={{ color: 'var(--text3)' }}>|</span>
+        <span>
+          運費小計：<span style={{ fontFamily: 'var(--mono)', color: 'var(--accent2)', fontWeight: 700 }}>
+            ${totalFare.toLocaleString()}
+          </span>
+        </span>
+        <span style={{ color: 'var(--text3)' }}>|</span>
+        <span style={{ color: 'var(--text3)' }}>
+          紀錄筆數 {totalRows.toLocaleString()}
+        </span>
       </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
@@ -109,7 +139,13 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
             </tr>
           </thead>
           <tbody>
-            {pageTrips.map((t: any) => (
+            {!pageTrips.length ? (
+              <tr>
+                <td colSpan={12} style={{ textAlign: 'center', color: 'var(--text3)', padding: 32 }}>
+                  尚無資料
+                </td>
+              </tr>
+            ) : pageTrips.map((t: any) => (
               <tr key={t.id}>
                 <td>{new Date(t.departed_at).toLocaleDateString('zh-TW')}</td>
                 <td>{t.drivers?.name ?? '-'}</td>
@@ -117,7 +153,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
                 <td>{t.vendor_rate_rules?.service_type ?? ''}</td>
                 <td style={{ textAlign: 'center' }}>{t.trip_count}</td>
                 <td>{t.destination_area ?? '-'}</td>
-                <td style={{ textAlign: 'center' }}>{t.actual_stops ?? '0'}</td>
+                <td style={{ textAlign: 'center' }}>{t.actual_stops ?? ''}</td>
                 <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{t.final_fare?.toLocaleString()}</td>
                 <td style={{ textAlign: 'center' }}>{t.is_kpi_achieved ? <Check size={16} color="green" /> : ''}</td>
                 <td>
@@ -128,13 +164,30 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
                 </td>
                 <td style={{ fontSize: 12 }}>{t.notes}</td>
                 <td>
-                  <TripRowActions trip={t} vendors={vendors ?? []} rateRules={rateRules ?? []} drivers={drivers ?? []} vehicles={vehicles ?? []} />
+                  <TripRowActions 
+                    trip={t} 
+                    vendors={vendors ?? []} 
+                    rateRules={rateRules ?? []} 
+                    drivers={drivers ?? []} 
+                    vehicles={vehicles ?? []}
+                    surcharges={surcharges ?? []} // 🌟 記得傳入！
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      
+      {/* 🌟 補回分頁元件 */}
+      {totalRows > 0 && (
+        <Pagination
+          page={win.page}
+          totalPages={win.totalPages}
+          total={totalRows}
+          pageSize={win.pageSizeStr}
+        />
+      )}
     </div>
   )
 }
