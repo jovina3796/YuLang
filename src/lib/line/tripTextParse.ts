@@ -2,25 +2,26 @@
 //
 // Input examples (driver freeform, single LINE message):
 //   "2號 低鮮 低鮮 冷鏈永和10"     → 3 trips on day 2 of current month
-//   "今天 低鮮5"                    → 1 trip today (低鮮, 5 stops)
+//   "今天 低鮮5"                   → 1 trip today (低鮮, 5 stops)
 //   "5/12 冷鏈淡水 冷鏈三重8"      → 2 trips on May 12
-//   "4號 休息"                      → rest day
+//   "4號 休息"                     → rest day
+//   "今天 低鮮5 颱風假"            → 1 trip today with surcharge keyword "颱風假" (🌟 新增支援)
 //
 // Multi-day (single LINE message): segments separated by newline OR ; OR ；
 //   "2號 低鮮 冷鏈永和10\n3號 低鮮5"
 //   "2號 低鮮；3號 休息；5/12 冷鏈淡水"
 //
 // Format (per segment):
-//   <date-token> <trip-token>+
+//   <date-token> <trip-token>+ <surcharge-keyword>*
 //   OR
 //   <date-token> 休息
 //
 // Date tokens (TW timezone):
-//   今天 / 今日           → today
-//   昨天 / 昨日           → yesterday
-//   N號                   → day N of current month
-//   M月N號 / M月N日       → month M day N of current year
-//   M/N                   → same as 月日
+//   今天 / 今日            → today
+//   昨天 / 昨日            → yesterday
+//   N號                    → day N of current month
+//   M月N號 / M月N日        → month M day N of current year
+//   M/N                    → same as 月日
 //
 // Trip tokens: <service><area?><stops?>
 //   service = longest-prefix match against the supplied service-type list
@@ -37,7 +38,8 @@ export type ParsedTrip = {
 
 export type ParsedDay =
   | { kind: 'rest'; date: TwDate }
-  | { kind: 'trips'; date: TwDate; trips: ParsedTrip[] }
+  // 🌟 新增 surcharges 陣列，用來存放這一天觸發的所有特殊加成關鍵字
+  | { kind: 'trips'; date: TwDate; trips: ParsedTrip[]; surcharges: string[] } 
 
 export type ParseResult =
   | { kind: 'days'; days: ParsedDay[] }
@@ -89,7 +91,6 @@ function parseDateToken(tok: string): TwDate | null {
 }
 
 function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: string } {
-  // Longest-prefix match against the known service list.
   const sorted = [...services].sort((a, b) => b.length - a.length)
   let svc: string | null = null
   for (const s of sorted) {
@@ -98,7 +99,7 @@ function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: 
   if (!svc) return { error: `無法辨識業務「${tok}」` }
   const rest = tok.slice(svc.length)
   if (rest === '') return { service: svc, area: null, stops: null }
-  // rest must be: <text?><digits?>$  with at least one of them non-empty
+  
   const mm = rest.match(/^([^\d\s]*)(\d+)?$/)
   if (!mm || (mm[1] === '' && mm[2] == null)) {
     return { error: `「${tok}」格式不正確（應為 業務 或 業務+配送區域+數字）` }
@@ -110,7 +111,8 @@ function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: 
   }
 }
 
-export function parseTripText(text: string, services: string[]): ParseResult {
+// 🌟 新增第三個參數：validSurcharges (從資料庫撈出的合法關鍵字清單，例如 ['颱風假', '颱風機制'])
+export function parseTripText(text: string, services: string[], validSurcharges: string[] = []): ParseResult {
   const segments = text.split(SEGMENT_SEP_RE).map(s => s.trim()).filter(Boolean)
   if (segments.length === 0) {
     return { kind: 'error', message: '訊息為空' }
@@ -136,13 +138,29 @@ export function parseTripText(text: string, services: string[]): ParseResult {
       days.push({ kind: 'rest', date })
       continue
     }
+    
     const trips: ParsedTrip[] = []
+    const surcharges: string[] = [] // 🌟 用來收集當天解析出的加成關鍵字
+
     for (const t of rest) {
+      // 🌟 先檢查這個單字是不是加成關鍵字？如果是，就放進 surcharges 陣列，不當作車趟處理
+      if (validSurcharges.includes(t)) {
+        surcharges.push(t)
+        continue
+      }
+
+      // 如果不是加成關鍵字，就按照正常流程去解析業務車趟
       const p = parseTripToken(t, services)
       if ('error' in p) return { kind: 'error', message: `${prefix}${p.error}` }
       trips.push(p)
     }
-    days.push({ kind: 'trips', date, trips })
+
+    // 🌟 防呆：如果司機只打了「今天 颱風假」卻沒寫車趟，也要報錯
+    if (trips.length === 0) {
+      return { kind: 'error', message: `${prefix}只有加成關鍵字，沒有填寫實際車趟` }
+    }
+
+    days.push({ kind: 'trips', date, trips, surcharges })
   }
 
   return { kind: 'days', days }
