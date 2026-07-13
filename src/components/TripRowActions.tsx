@@ -26,7 +26,7 @@ interface Props {
   surcharges: any[]
 }
 
-export default function TripRowActions({ trip, vendors, rateRules, drivers, vehicles }: Props) {
+export default function TripRowActions({ trip, vendors, rateRules, drivers, vehicles, surcharges }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
