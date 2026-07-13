@@ -45,6 +45,15 @@ const ADMIN_ROLES = ['admin', 'owner']
 
 const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2}[號日]?|\d{1,2}\/\d{1,2})(\s|$)/
 
+// 🌟 新增：允許使用 + 號作為「今天」的極短快捷鍵
+const QUICK_TODAY_RE = /^\+(\s*)/
+
+export function looksLikeTripText(text: string): boolean {
+  const stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
+  // 🌟 只要是日期開頭，或是 + 號開頭，才放行進入報趟解析器
+  return DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)
+}
+
 const ASSIGN_DRIVER_HEAD_RE = /^指定司機[：:]\s*(\S+)\s+/
 const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
 
@@ -131,6 +140,11 @@ export async function handleTripText(
   const activeSurchargeKeywords = Array.from(new Set(surcharges.map(s => s.keyword)))
   
   const services = Array.from(new Set(rules.map(r => r.service_type).filter(Boolean)))
+
+  // 🌟 核心小魔術：如果司機是用 + 開頭，我們在背景偷偷幫他補上「今天 」
+  if (QUICK_TODAY_RE.test(parseText)) {
+    parseText = parseText.replace(QUICK_TODAY_RE, '今天 ')
+  }
 
   // 🌟 將合法關鍵字傳給解析引擎
   const parsed = parseTripText(parseText, services, activeSurchargeKeywords)
