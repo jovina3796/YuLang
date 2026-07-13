@@ -3,7 +3,7 @@ import { getCurrentProfile } from '@/lib/auth'
 import { loadRolePermissions } from '@/lib/rolePermissions.server'
 import { resolveAllowedPages } from '@/lib/permissions'
 import SubNavTabs from '@/components/SubNavTabs'
-import { Building2, Tags, MapPinned, Percent } from 'lucide-react'
+import { Building2, Tags, MapPinned, Percent, BellRing } from 'lucide-react'
 
 type Key = 'vendors' | 'rates' | 'subroutes' | 'driver-rates' | 'surcharges' | 'reminders'
 
