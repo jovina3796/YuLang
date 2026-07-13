@@ -16,6 +16,14 @@ type RateRule = {
 type Driver  = { id: string; name: string }
 type Vehicle = { id: string; plate_number: string }
 
+// 🌟 新增：特殊加成方案型別
+export type SurchargeRule = {
+  id: string
+  vendor_id: string
+  name: string
+  rate: number
+}
+
 export type TripRow = {
   id:               string
   vendor_id:        string
@@ -29,6 +37,9 @@ export type TripRow = {
   is_special:       boolean | null
   trip_count:       number
   notes:            string | null
+  // 🌟 新增：用於編輯模式帶入的初始值
+  surcharge_name?:  string | null
+  surcharge_rate?:  number | null
 }
 
 interface Props {
@@ -36,30 +47,47 @@ interface Props {
   rateRules: RateRule[]
   drivers:   Driver[]
   vehicles:  Vehicle[]
+  surcharges?: SurchargeRule[] // 🌟 接收外層傳入的加成方案 (加上 ? 避免舊程式碼報錯)
   mode:      'create' | 'edit'
   initial?:  TripRow
   trigger?:  React.ReactNode
 }
 
-function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boolean, isSpecial: boolean) {
-  let fare = 0
+// 🌟 同步更新：使用我們稍早寫好的「精準切帳版」運費計算機
+function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boolean, isSpecial: boolean, surchargeRate: number = 0) {
+  let baseFareTotal = 0
+  let extraFareTotal = 0
   const bundle  = Math.max(1, rule.base_trips ?? 1)
   const bundles = Math.ceil(tripCount / bundle)
+
   switch (rule.pricing_mode) {
     case 'flat':
-      fare = (rule.base_fare ?? 0) * bundles; break
+      baseFareTotal = (rule.base_fare ?? 0) * bundles; break
     case 'base_or_kpi': {
       const base  = isKpi ? (rule.kpi_fare ?? rule.base_fare ?? 0) : (rule.base_fare ?? 0)
-      const extra = stops > (rule.base_stops ?? 0)
-        ? (stops - (rule.base_stops ?? 0)) * (rule.surcharge_per_stop ?? 0) : 0
-      fare = base * bundles + extra; break
+      baseFareTotal = base * bundles
+      const extraStops = stops > (rule.base_stops ?? 0) ? stops - (rule.base_stops ?? 0) : 0
+      extraFareTotal = extraStops * (rule.surcharge_per_stop ?? 0)
+      break
     }
     case 'per_stop_count':
-      fare = stops * (rule.surcharge_per_stop ?? 0); break
+      baseFareTotal = stops * (rule.surcharge_per_stop ?? 0); break
     case 'pure_surcharge':
-      fare = ((rule.base_fare ?? 0) + stops * (rule.surcharge_per_stop ?? 0)) * bundles; break
+      baseFareTotal = (rule.base_fare ?? 0) * bundles
+      extraFareTotal = stops * (rule.surcharge_per_stop ?? 0) * bundles
+      break
   }
-  if (isSpecial) fare = fare * 1.3
+  
+  let fare = baseFareTotal + extraFareTotal
+  
+  // 舊版的特殊費率打勾
+  if (isSpecial && rule.special_rate) fare = fare * (1 + rule.special_rate)
+  
+  // 🌟 新版的特殊加成 (只針對基本費)
+  if (surchargeRate > 0) {
+    fare += (baseFareTotal * surchargeRate)
+  }
+  
   return Math.round(fare)
 }
 
@@ -72,34 +100,40 @@ function toLocalDate(s: string): string {
 }
 
 function localDateToIso(s: string): string {
-  // s = 'YYYY-MM-DD' — 視為本地午夜，避免被 new Date(s) 當成 UTC 午夜
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString()
 }
 
-export default function TripFormModal({ vendors, rateRules, drivers, vehicles, mode, initial, trigger }: Props) {
+export default function TripFormModal({ vendors, rateRules, drivers, vehicles, surcharges = [], mode, initial, trigger }: Props) {
   const router = useRouter()
   const today  = new Date().toISOString().split('T')[0]
 
   const initialRule = initial ? rateRules.find(r => r.id === initial.rate_rule_id) : undefined
   const initialDate = initial?.departed_at ? toLocalDate(initial.departed_at) : today
 
-  const [open,         setOpen]         = useState(false)
-  const [saving,       setSaving]       = useState(false)
-  const [date,         setDate]         = useState(initialDate)
-  const [vendorId,     setVendorId]     = useState(initial?.vendor_id ?? '')
-  const [area,         setArea]         = useState(initialRule?.destination_area ?? '')
-  const [svcType,      setSvcType]      = useState(initialRule?.service_type ?? '')
-  const [tripCount,    setTripCount]    = useState(initial?.trip_count ?? 1)
-  const [driverId,     setDriverId]     = useState(initial?.driver_id ?? '')
-  const [vehicleId,    setVehicleId]    = useState(initial?.vehicle_id ?? '')
+  const [open,          setOpen]         = useState(false)
+  const [saving,        setSaving]       = useState(false)
+  const [date,          setDate]         = useState(initialDate)
+  const [vendorId,      setVendorId]     = useState(initial?.vendor_id ?? '')
+  const [area,          setArea]         = useState(initialRule?.destination_area ?? '')
+  const [svcType,       setSvcType]      = useState(initialRule?.service_type ?? '')
+  const [tripCount,     setTripCount]    = useState(initial?.trip_count ?? 1)
+  const [driverId,      setDriverId]     = useState(initial?.driver_id ?? '')
+  const [vehicleId,     setVehicleId]    = useState(initial?.vehicle_id ?? '')
   const [deliveryArea, setDeliveryArea] = useState(initial?.destination_area ?? '')
   const [actualStops,  setActualStops]  = useState<number | ''>(initial?.actual_stops ?? '')
-  const [isKpi,        setIsKpi]        = useState(initial?.is_kpi_achieved ?? true)
-  const [isSpecial,    setIsSpecial]    = useState(initial?.is_special ?? false)
+  const [isKpi,         setIsKpi]        = useState(initial?.is_kpi_achieved ?? true)
+  const [isSpecial,     setIsSpecial]    = useState(initial?.is_special ?? false)
   const [manualOverride, setManualOverride] = useState(false)
   const [manualFare,   setManualFare]   = useState<number | ''>('')
-  const [notes,        setNotes]        = useState(initial?.notes ?? '')
+  const [notes,         setNotes]        = useState(initial?.notes ?? '')
+
+  // 🌟 新增：管理特殊加成下拉選單的狀態
+  // 如果是編輯模式，嘗試從傳入的 name 找到對應的選項
+  const initialSurcharge = initial?.surcharge_name 
+    ? surcharges.find(s => s.vendor_id === initial.vendor_id && s.name === initial.surcharge_name)
+    : undefined
+  const [selectedSurchargeId, setSelectedSurchargeId] = useState<string>(initialSurcharge?.id ?? '')
 
   const vendorRules = useMemo(
     () => [...rateRules].filter(r => r.vendor_id === vendorId).sort((a, b) =>
@@ -107,6 +141,11 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
     ),
     [rateRules, vendorId],
   )
+  
+  // 🌟 篩選出該廠商可用的所有特殊加成方案
+  const availableSurcharges = useMemo(() => {
+    return surcharges.filter(s => s.vendor_id === vendorId)
+  }, [surcharges, vendorId])
 
   const availableAreas = useMemo(() => {
     const seen = new Set<string>()
@@ -134,8 +173,12 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
     [vendorRules, area, svcType],
   )
 
+  // 🌟 尋找當前選取的加成方案資料
+  const currentSurcharge = availableSurcharges.find(s => s.id === selectedSurchargeId)
+
   const stops      = typeof actualStops === 'number' ? actualStops : 0
-  const autoFare   = matchedRule ? calcFare(matchedRule, tripCount, stops, isKpi, isSpecial) : null
+  // 🌟 把 currentSurcharge?.rate 傳進去算錢
+  const autoFare   = matchedRule ? calcFare(matchedRule, tripCount, stops, isKpi, isSpecial, currentSurcharge?.rate ?? 0) : null
   const isPerStop  = matchedRule?.pricing_mode === 'per_stop_count'
   const isKpiBased = matchedRule?.pricing_mode === 'base_or_kpi'
 
@@ -143,7 +186,7 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
   const showStops   = !!matchedRule && (matchedRule.base_stops != null || matchedRule.surcharge_per_stop != null)
   const showKpi     = isKpiBased
   const showDeliveryNote = isKpiBased
-  const showSpecial = !!matchedRule?.special_rate
+  const showSpecial = !!matchedRule?.special_rate // 這是舊版的特定節日打勾
 
   function applyVendor(vid: string) {
     setVendorId(vid)
@@ -166,6 +209,7 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
     }
     setSvcType(types[0] ?? '')
     setTripCount(1); setActualStops(''); setIsKpi(true); setDeliveryArea('')
+    setSelectedSurchargeId('') // 🌟 切換廠商時清空加成
   }
 
   function applyArea(a: string) {
@@ -187,13 +231,16 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
       setIsSpecial(false); setManualOverride(false); setManualFare('')
       setDeliveryArea(''); setNotes('')
       setDriverId(''); setVehicleId(''); setDate(today)
+      setSelectedSurchargeId('') // 🌟 記得清空
     }
   }
 
   async function handleSubmit() {
     if (!vendorId || !matchedRule) return
     const finalFare = manualOverride && manualFare !== '' ? Number(manualFare) : autoFare
-    const payload: TripInput = {
+    
+    // 🌟 將選取的加成資料一併包進 payload 裡
+    const payload: TripInput & { surcharge_name?: string | null; surcharge_rate?: number } = {
       vendor_id:        vendorId,
       rate_rule_id:     matchedRule.id,
       driver_id:        driverId  || null,
@@ -208,11 +255,15 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
       trip_count:       tripCount,
       notes:            notes || null,
       status:           'completed',
+      // 寫入新欄位
+      surcharge_name:   currentSurcharge ? currentSurcharge.name : null,
+      surcharge_rate:   currentSurcharge ? currentSurcharge.rate : 0,
     }
+    
     setSaving(true)
     const { error } = mode === 'create'
-      ? await createTrip(payload)
-      : await updateTrip(initial!.id, payload)
+      ? await createTrip(payload as TripInput)
+      : await updateTrip(initial!.id, payload as TripInput)
     setSaving(false)
     if (error) { alert(`儲存失敗：${error}`); return }
     setOpen(false); resetForm(); router.refresh()
@@ -352,11 +403,31 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
                 </div>
               )}
 
-              {showSpecial && (
+              {/* 🌟 拔除舊版 isSpecial checkbox，換成新版動態下拉選單 */}
+              {availableSurcharges.length > 0 && (
+                <label style={L}>
+                  <span style={LT}>特殊加成方案</span>
+                  <select 
+                    className="input" 
+                    value={selectedSurchargeId} 
+                    onChange={e => setSelectedSurchargeId(e.target.value)}
+                  >
+                    <option value="">— 無特殊加成 —</option>
+                    {availableSurcharges.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (加成 {(s.rate * 100).toFixed(0)}%)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {/* 如果廠商剛好沒有設定任何新版加成，但這條費率規則有舊版打勾，做個兼容保留 */}
+              {showSpecial && availableSurcharges.length === 0 && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="checkbox" checked={isSpecial} onChange={e => setIsSpecial(e.target.checked)} />
                   <span style={{ fontSize: 13 }}>
-                    加成費（特定節日／特殊情形，基本運費加成 30%）
+                    加成費（特定節日／特殊情形，基本運費加成 {(matchedRule?.special_rate ?? 0) * 100}%）
                   </span>
                 </label>
               )}
@@ -388,6 +459,9 @@ export default function TripFormModal({ vendors, rateRules, drivers, vehicles, m
                       })()}
                       {matchedRule?.pricing_mode === 'per_stop_count' &&
                         `${stops} 件 × NT$${matchedRule.surcharge_per_stop}`}
+                      
+                      {/* 如果有套用加成，在小字提醒 */}
+                      {currentSurcharge && ` ＋ 加成 ${(currentSurcharge.rate * 100).toFixed(0)}%`}
                     </div>
                   </div>
                   <span style={{ fontSize: 26, fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--accent2)' }}>
