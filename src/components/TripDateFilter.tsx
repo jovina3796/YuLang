@@ -44,14 +44,22 @@ export default function TripDateFilter({ vendors }: { vendors: Vendor[] }) {
     const start = new Date(Date.UTC(y, m - 1, d))
     start.setUTCDate(start.getUTCDate() - (days - 1))
     const pad = (n: number) => String(n).padStart(2, '0')
-    const f = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}`
-    setFrom(f); setTo(todayStr)
+    const fStr = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}`
+    
+    setFrom(fStr)
+    setTo(todayStr)
+    // 🌟 優化：點擊快捷按鈕後，立刻自動送出查詢，不用再按一次 Search 按鈕！
+    router.push(buildHref({ from: fStr, to: todayStr, vendor: vendorId }))
   }
 
   function applyThisMonth() {
     const todayStr = ymdTaipei(new Date())
     const fStr = `${todayStr.slice(0, 7)}-01`
-    setFrom(fStr); setTo(todayStr)
+    
+    setFrom(fStr)
+    setTo(todayStr)
+    // 🌟 優化：點擊快捷按鈕後，立刻自動送出查詢！
+    router.push(buildHref({ from: fStr, to: todayStr, vendor: vendorId }))
   }
 
   function submitFilter() {
