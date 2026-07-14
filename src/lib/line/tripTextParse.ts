@@ -6,6 +6,7 @@
 //   "5/12 冷鏈淡水 冷鏈三重8"      → 2 trips on May 12
 //   "4號 休息"                     → rest day
 //   "今天 低鮮5 颱風假"            → 1 trip today with surcharge keyword "颱風假" (🌟 新增支援)
+//   "14號 冷鏈林口7點 文山5點"     → 2 trips (🌟 支援省略業務繼承，文山自動帶入冷鏈)
 //
 // Multi-day (single LINE message): segments separated by newline OR ; OR ；
 //   "2號 低鮮 冷鏈永和10\n3號 低鮮5"
@@ -90,6 +91,7 @@ function parseDateToken(tok: string): TwDate | null {
   return null
 }
 
+// 1. 🌟 修改 parseTripToken，讓它自動忽略結尾的「點、件、箱、趟、車」
 function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: string } {
   const sorted = [...services].sort((a, b) => b.length - a.length)
   let svc: string | null = null
@@ -100,9 +102,10 @@ function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: 
   const rest = tok.slice(svc.length)
   if (rest === '') return { service: svc, area: null, stops: null }
   
-  const mm = rest.match(/^([^\d\s]*)(\d+)?$/)
+  // 🌟 寬容正則：支援非數字區域 + 數字 + 可選單位
+  const mm = rest.match(/^([^\d\s]*?)(\d+)?(?:點|件|箱|趟|車)?$/)
   if (!mm || (mm[1] === '' && mm[2] == null)) {
-    return { error: `「${tok}」格式不正確（應為 業務 或 業務+配送區域+數字）` }
+    return { error: `「${tok}」格式不正確（應為 業務 或 業務+區域+數字）` }
   }
   return {
     service: svc,
@@ -111,7 +114,6 @@ function parseTripToken(tok: string, services: string[]): ParsedTrip | { error: 
   }
 }
 
-// 🌟 新增第三個參數：validSurcharges (從資料庫撈出的合法關鍵字清單，例如 ['颱風假', '颱風機制'])
 export function parseTripText(text: string, services: string[], validSurcharges: string[] = []): ParseResult {
   const segments = text.split(SEGMENT_SEP_RE).map(s => s.trim()).filter(Boolean)
   if (segments.length === 0) {
@@ -149,6 +151,9 @@ export function parseTripText(text: string, services: string[], validSurcharges:
     const trips: ParsedTrip[] = []
     const surcharges: string[] = [] // 🌟 用來收集當天解析出的加成關鍵字
 
+    // 🌟 關鍵新增：記憶前一趟成功的業務名稱（例如 '冷鏈'）
+    let lastService: string | null = null
+
     for (const t of rest) {
       // 🌟 先檢查這個單字是不是加成關鍵字？如果是，就放進 surcharges 陣列，不當作車趟處理
       if (validSurcharges.includes(t)) {
@@ -156,9 +161,23 @@ export function parseTripText(text: string, services: string[], validSurcharges:
         continue
       }
 
-      // 如果不是加成關鍵字，就按照正常流程去解析業務車趟
-      const p = parseTripToken(t, services)
+      // 嘗試進行一般車趟解析
+      let p = parseTripToken(t, services)
+
+      // 🌟 魔法核心：如果這趟解析失敗（例如「文山5點」因為前面沒有寫「冷鏈」而認不得）
+      // 且我們前面有記錄到成功的業務名稱（如「冷鏈」）
+      // 那我們就自動幫他把业务跟當前的文字拼在一起（變成「冷鏈文山5點」）重新嘗試解析！
+      if ('error' in p && lastService) {
+        const retryP = parseTripToken(lastService + t, services)
+        if (!('error' in retryP)) {
+          p = retryP
+        }
+      }
+
       if ('error' in p) return { kind: 'error', message: `${prefix}${p.error}` }
+      
+      // 🌟 成功解析後，更新最後一次成功的業務名稱，供後續省略業務時繼承使用
+      lastService = p.service
       trips.push(p)
     }
 
