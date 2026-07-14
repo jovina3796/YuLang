@@ -147,7 +147,14 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               </tr>
             ) : pageTrips.map((t: any) => (
               <tr key={t.id}>
-                <td>{new Date(t.departed_at).toLocaleDateString('zh-TW')}</td>
+                <td style={{ textAlign: 'center' }}>
+                  {new Date(t.departed_at).toLocaleDateString('zh-TW', { 
+                    timeZone: 'Asia/Taipei', 
+                    year: 'numeric', 
+                    month: '2-digit', 
+                    day: '2-digit' 
+                  })}
+                </td>
                 <td>{t.drivers?.name ?? '-'}</td>
                 <td>{t.vendors?.name ?? ''}</td>
                 <td>{t.vendor_rate_rules?.service_type ?? ''}</td>
