@@ -48,25 +48,40 @@ const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2
 // 🌟 新增：允許使用 + 號作為「今天」的極短快捷鍵
 const QUICK_TODAY_RE = /^\+(\s*)/
 
+// 🌟 新增：隱式指定（直接打名字），抓取 2-4 個中文字，且後面緊接日期或 + 號
+const IMPLICIT_NAME_RE = /^([\u4e00-\u9fa5]{2,4})\s*(?=(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月|\d{1,2}\/|\+))/
+
 const ASSIGN_DRIVER_HEAD_RE = /^指定司機[：:]\s*(\S+)\s+/
 const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
 
 // 🌟 確保整份檔案只有這「唯一一個」 looksLikeTripText 函式
 export function looksLikeTripText(text: string): boolean {
-  const stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
+  let stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
+  
+  // 🌟 如果開頭是中文名字，先假裝它不存在，繼續往後看是不是日期
+  const implicitMatch = stripped.match(IMPLICIT_NAME_RE)
+  if (implicitMatch) {
+    stripped = stripped.slice(implicitMatch[1].length).trim()
+  }
+
   // 只要是日期開頭，或是 + 號開頭，才放行進入報趟解析器
   return DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)
 }
 
-function extractAssignedDriver(text: string): { name: string; remaining: string } | null {
+function extractAssignedDriver(text: string): { name: string; remaining: string; isExplicit: boolean } | null {
   const t = text.trim()
   const head = t.match(ASSIGN_DRIVER_HEAD_RE)
   if (head) {
-    return { name: head[1], remaining: t.slice(head[0].length).trim() }
+    return { name: head[1], remaining: t.slice(head[0].length).trim(), isExplicit: true }
   }
   const tail = t.match(ASSIGN_DRIVER_TAIL_RE)
   if (tail) {
-    return { name: tail[1], remaining: t.slice(0, tail.index).trim() }
+    return { name: tail[1], remaining: t.slice(0, tail.index).trim(), isExplicit: true }
+  }
+  // 🌟 隱式指定：抓取字首的名字
+  const implicitHead = t.match(IMPLICIT_NAME_RE)
+  if (implicitHead) {
+    return { name: implicitHead[1], remaining: t.slice(implicitHead[1].length).trim(), isExplicit: false }
   }
   return null
 }
@@ -83,20 +98,31 @@ export async function handleTripText(
   let actingDriverId = driverId
   let actingDriverName = driverName
   let parseText = text
+  
   const assigned = extractAssignedDriver(text)
   if (assigned) {
-    if (!(await isAdminLineUser(lineUserId))) {
-      await reply(replyToken, [textMessage('「指定司機」僅限管理員使用。')])
-      return
-    }
     const target = await findDriverByName(assigned.name)
+    
     if (!target) {
-      await reply(replyToken, [textMessage(`找不到司機「${assigned.name}」（需為啟用中且姓名完全相符）。`)])
-      return
+      // 只有在「明確指定 (指定司機：XXX)」時，找不到人才報錯
+      // 隱式指定如果找不到人，就當作他只是在講普通的話，忽略並繼續解析原文
+      if (assigned.isExplicit) {
+        await reply(replyToken, [textMessage(`找不到司機「${assigned.name}」（需為啟用中且姓名完全相符）。`)])
+        return
+      }
+    } else {
+      // 🌟 重點防呆：如果名字「不是」該司機本人，且他「沒有」管理員權限，才報錯擋下
+      if (target.id !== driverId && !(await isAdminLineUser(lineUserId))) {
+        const msg = assigned.isExplicit ? '「指定司機」僅限管理員使用。' : '「代為回報」僅限管理員使用。'
+        await reply(replyToken, [textMessage(msg)])
+        return
+      }
+      
+      // 順利驗證通過，抽掉名字，剩下的交給後面解析
+      actingDriverId = target.id
+      actingDriverName = target.name
+      parseText = assigned.remaining
     }
-    actingDriverId = target.id
-    actingDriverName = target.name
-    parseText = assigned.remaining
   }
 
   // 🌟 一次撈齊：費率規則、區域對照表，以及【啟用中的特殊加成規則】
