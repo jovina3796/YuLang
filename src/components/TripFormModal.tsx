@@ -92,11 +92,7 @@ function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boole
 }
 
 function toLocalDate(s: string): string {
-  const d = new Date(s)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return new Date(s).toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
 }
 
 function localDateToIso(s: string): string {
