@@ -1,1 +1,8 @@
-"schedule": "0 14 * * *" // 台灣時間晚上 8 點觸發 (剛好符合大部分人的提醒需求)
+{
+  "crons": [
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 14 * * * *" 
+    }
+  ]
+}
