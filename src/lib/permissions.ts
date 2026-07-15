@@ -11,6 +11,7 @@ export const NAV_HREFS = [
   '/people/drivers',
   '/people/users',
   '/people/permissions',
+  '/people/reminders'
   '/schedule',
   '/fuel',
   '/maintenance',
@@ -23,7 +24,6 @@ export const NAV_HREFS = [
   '/vendor-info/subroutes',
   '/vendor-info/driver-rates',
   '/vendor-info/surcharges',
-  '/vendor-info/reminders',
   '/claims',
   '/leaves',
   '/overtimes',
@@ -38,6 +38,7 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/people/drivers':          '人員管理 — 司機資料',
   '/people/users':            '人員管理 — 登入帳號',
   '/people/permissions':      '人員管理 — 權限設定',
+  '/people/reminders':     '廠商資訊 — 定時提醒管理',
   '/schedule':                '排班設定',
   '/fuel':                    '加油紀錄',
   '/maintenance':             '保養維修',
@@ -50,7 +51,6 @@ export const NAV_LABELS: Record<NavHref, string> = {
   '/vendor-info/subroutes':   '廠商資訊 — 配送區域對應',
   '/vendor-info/driver-rates':'廠商資訊 — 例外抽成設定', 
   '/vendor-info/surcharges':   '廠商資訊 — 特殊加成設定',
-  '/vendor-info/reminders':     '廠商資訊 — 定時提醒管理',
   '/claims':                  '請款簽核',
   '/leaves':                  '請假簽核',
   '/overtimes':               '加班簽核',
@@ -63,11 +63,11 @@ export const NAV_LABELS: Record<NavHref, string> = {
 export const NAV_PARENTS: Record<string, { label: string; subs: NavHref[] }> = {
   '/people': {
     label: '人員管理',
-    subs:  ['/people/drivers', '/people/users', '/people/permissions'],
+    subs:  ['/people/drivers', '/people/users', '/people/permissions', '/people/reminders'],
   },
   '/vendor-info': {
     label: '廠商資訊',
-    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates', '/vendor-info/surcharges', '/vendor-info/reminders'],
+    subs:  ['/vendor-info/vendors', '/vendor-info/rates', '/vendor-info/subroutes', '/vendor-info/driver-rates', '/vendor-info/surcharges'],
   },
 }
 
@@ -182,10 +182,13 @@ export function resolveAllowedPages(
     }
   }
 
+  if (out.has('/people/drivers')) {
+    out.add('/people/reminders') 
+  }
+
   if (out.has('/vendor-info/rates')) {
     out.add('/vendor-info/driver-rates')
     out.add('/vendor-info/surcharges')
-    out.add('/vendor-info/reminders')
   }
 
   return out
