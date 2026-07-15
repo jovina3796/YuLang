@@ -62,7 +62,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 960 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1400 }}>
       
       {/* 1. 系統設定：管理提醒語句 */}
       <div className="card">
