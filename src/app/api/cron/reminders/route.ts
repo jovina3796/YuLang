@@ -52,8 +52,8 @@ export async function GET(request: Request) {
   const { data: groups } = await supabase
     .from('line_groups')
     .select('name, line_group_id, reminder_time')
-    .eq('is_reminder_enabled', true) // 🌟 記得對應新欄位名
-
+    .eq('is_reminder_enabled', true)
+  
   for (const g of (groups || [])) {
     if (g.reminder_time && isTimeMatch(g.reminder_time, currentHHMM)) {
       try {
