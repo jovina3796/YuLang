@@ -11,24 +11,11 @@ export async function updateSystemSetting(key: string, value: string) {
     .eq('key', key)
 
   if (error) return { error: error.message }
-  revalidatePath('/vendor-info/reminders')
+  revalidatePath('/people/reminders') 
   return { error: null }
 }
 
-// 2. 快速切換 LINE 群組的提醒開關
-export async function toggleGroupReminder(id: string, reminder_enabled: boolean) {
-  const supabase = createServiceClient()
-  const { error } = await supabase
-    .from('line_groups')
-    .update({ reminder_enabled })
-    .eq('id', id)
-
-  if (error) return { error: error.message }
-  revalidatePath('/vendor-info/reminders')
-  return { error: null }
-}
-
-// 3. 修改 LINE 群組的顯示備註名稱
+// 2. 修改 LINE 群組的顯示備註名稱
 export async function updateGroupName(id: string, name: string) {
   const supabase = createServiceClient()
   const { error } = await supabase
@@ -37,19 +24,38 @@ export async function updateGroupName(id: string, name: string) {
     .eq('id', id)
 
   if (error) return { error: error.message }
-  revalidatePath('/vendor-info/reminders')
+  revalidatePath('/people/reminders') 
   return { error: null }
 }
 
-// 4. 快速切換個別司機的每日提醒開關
-export async function toggleDriverReminder(id: string, daily_reminder_enabled: boolean) {
+// 3. 🌟 新版：更新 LINE 群組提醒時間與開關
+export async function updateGroupReminderSettings(id: string, enabled: boolean, timeStr: string) {
   const supabase = createServiceClient()
   const { error } = await supabase
-    .from('drivers')
-    .update({ daily_reminder_enabled })
+    .from('line_groups')
+    .update({ 
+      is_reminder_enabled: enabled,
+      reminder_time: `${timeStr}:00` // 轉換為 Postgres TIME 格式
+    })
     .eq('id', id)
 
   if (error) return { error: error.message }
-  revalidatePath('/vendor-info/reminders')
+  revalidatePath('/people/reminders') 
+  return { error: null }
+}
+
+// 4. 🌟 新版：更新個別司機提醒時間與開關
+export async function updateDriverReminderSettings(id: string, enabled: boolean, timeStr: string) {
+  const supabase = createServiceClient()
+  const { error } = await supabase
+    .from('drivers')
+    .update({ 
+      is_daily_reminder_enabled: enabled,
+      daily_reminder_time: `${timeStr}:00` // 轉換為 Postgres TIME 格式
+    })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/people/reminders') 
   return { error: null }
 }
