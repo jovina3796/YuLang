@@ -107,6 +107,8 @@ export default function DriverFormModal({ vehicles, mode, initial, trigger }: Pr
       display_order: displayOrder === '' ? null : Number(displayOrder),
       show_in_dashboard: inactive ? false : showDashboard,
       show_in_schedule:  inactive ? false : showSchedule,
+      is_daily_reminder_enabled: (initial as any)?.is_daily_reminder_enabled ?? true,
+      daily_reminder_time:       (initial as any)?.daily_reminder_time ?? '20:00:00',
     }
     setSaving(true)
     const { error } = mode === 'create'
