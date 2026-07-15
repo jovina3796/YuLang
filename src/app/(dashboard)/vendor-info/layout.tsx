@@ -3,9 +3,11 @@ import { getCurrentProfile } from '@/lib/auth'
 import { loadRolePermissions } from '@/lib/rolePermissions.server'
 import { resolveAllowedPages } from '@/lib/permissions'
 import SubNavTabs from '@/components/SubNavTabs'
-import { Building2, Tags, MapPinned, Percent, BellRing } from 'lucide-react'
+// 🌟 已經移除 BellRing 圖示
+import { Building2, Tags, MapPinned, Percent } from 'lucide-react'
 
-type Key = 'vendors' | 'rates' | 'subroutes' | 'driver-rates' | 'surcharges' | 'reminders'
+// 🌟 已經移除 'reminders'
+type Key = 'vendors' | 'rates' | 'subroutes' | 'driver-rates' | 'surcharges'
 
 export default async function VendorInfoLayout({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile()
@@ -15,12 +17,13 @@ export default async function VendorInfoLayout({ children }: { children: React.R
     : new Set<string>()
 
   const pathname = (await headers()).get('x-pathname') ?? ''
+  
+  // 🌟 已經移除 reminders 的路由判斷
   const activeKey: Key =
     pathname.startsWith('/vendor-info/rates')        ? 'rates' :
     pathname.startsWith('/vendor-info/subroutes')    ? 'subroutes' :
     pathname.startsWith('/vendor-info/driver-rates') ? 'driver-rates' :
-    pathname.startsWith('/vendor-info/surcharges')    ? 'surcharges' :
-    pathname.startsWith('/vendor-info/reminders')    ? 'reminders' :
+    pathname.startsWith('/vendor-info/surcharges')   ? 'surcharges' :
     'vendors'
 
   const tabs = [
@@ -28,9 +31,8 @@ export default async function VendorInfoLayout({ children }: { children: React.R
     { key: 'rates'        as const, label: '運費設定',     icon: <Tags size={14} strokeWidth={1.8} />,      href: '/vendor-info/rates',        hidden: !allowed.has('/vendor-info/rates') },
     { key: 'subroutes'    as const, label: '配送區域對應', icon: <MapPinned size={14} strokeWidth={1.8} />, href: '/vendor-info/subroutes',    hidden: !allowed.has('/vendor-info/subroutes') },
     { key: 'driver-rates' as const, label: '例外抽成設定', icon: <Percent size={14} strokeWidth={1.8} />,   href: '/vendor-info/driver-rates', hidden: !allowed.has('/vendor-info/rates') },
-    { key: 'surcharges'   as const, label: '特殊加成設定', icon: <Percent size={14} strokeWidth={1.8} />,   href: '/vendor-info/surcharges',    hidden: !allowed.has('/vendor-info/rates') },
-    { key: 'reminders' as const, label: '定時提醒管理', icon: <BellRing size={14} strokeWidth={1.8} />, href: '/vendor-info/reminders', hidden: !allowed.has('/vendor-info/rates') 
-  },
+    { key: 'surcharges'   as const, label: '特殊加成設定', icon: <Percent size={14} strokeWidth={1.8} />,   href: '/vendor-info/surcharges',   hidden: !allowed.has('/vendor-info/rates') },
+    // 🌟 reminders 頁籤已經徹底刪除
   ]
 
   return (
