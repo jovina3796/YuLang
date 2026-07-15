@@ -127,7 +127,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
                         </div>
                       ) : (
                         <span 
-                          style={{ cursor: 'pointer', fontWeight: 600 }} 
+                          style={{ cursor: 'pointer', fontWeight: 450 }} 
                           title="點擊兩下可修改備註名稱"
                           onDoubleClick={() => {
                             setEditingGroupId(g.id)
@@ -178,7 +178,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
                 return (
                   <tr key={d.id} style={{ opacity: isEnabled ? 1 : 0.6 }}>
                     <td>
-                      <span style={{ fontWeight: 600 }}>{d.name}</span>
+                      <span style={{ fontWeight: 450 }}>{d.name}</span>
                       {d.line_user_id ? (
                         <span style={{ fontSize: 11, color: 'var(--green2)', marginLeft: 8 }}>● 已綁定</span>
                       ) : (
