@@ -106,7 +106,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>群組名稱 (雙擊可修改)</th>
-                <th style={{ width: 250, textAlign: 'right' }}>每日報趟提醒</th>
+                <th style={{ width: 350, textAlign: 'right' }}>每日報趟提醒</th>
               </tr>
             </thead>
             <tbody>
@@ -166,7 +166,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>司機姓名</th>
-                <th style={{ width: 250, textAlign: 'right' }}>每日報趟提醒</th>
+                <th style={{ width: 350, textAlign: 'right' }}>每日報趟提醒</th>
               </tr>
             </thead>
             <tbody>
@@ -186,7 +186,6 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {d.line_user_id ? (
-                        /* 🌟 換上新的時間選擇器元件 */
                         <ReminderTimePicker
                           targetId={d.id}
                           initialEnabled={isEnabled}
