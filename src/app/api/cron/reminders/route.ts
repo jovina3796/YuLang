@@ -6,54 +6,72 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  // 安全驗證：確保只有 Vercel Cron 能觸發
   const authHeader = request.headers.get('authorization')
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 })
   }
 
   const supabase = createServiceClient()
+  
+  // 🌟 1. 取得現在台灣時間 (HH:MM)
+  const now = new Date();
+  const taipeiOffset = 8 * 60 * 60 * 1000;
+  const taipeiNow = new Date(now.getTime() + taipeiOffset);
+  const currentHHMM = taipeiNow.toTimeString().slice(0, 5) + ":00"; // "HH:MM:00"
+
+  // 🌟 2. 獲取系統設定的提醒詞
+  const { data: settings } = await supabase.from('system_settings').select('key, value')
+  const reminderMsg = settings?.find(s => s.key === 'daily_reminder_msg')?.value 
+    || '大家辛苦了！\n請記得回報今日的車趟喔 🚛'
+
   let successCount = 0
 
   // ==========================================
-  // 1. 發送私訊給個別司機
+  // 1. 發送私訊給個別司機 (檢查時間窗口)
   // ==========================================
   const { data: drivers } = await supabase
     .from('drivers')
-    .select('name, line_user_id')
+    .select('name, line_user_id, daily_reminder_time')
     .eq('status', 'active')
-    .eq('daily_reminder_enabled', true) // 🌟 只找有開提醒的
+    .eq('is_daily_reminder_enabled', true) // 🌟 記得對應新欄位名
     .not('line_user_id', 'is', null)
 
   for (const d of (drivers || [])) {
-    try {
-      await push(d.line_user_id, [
-        textMessage(`晚安 ${d.name}！🌙\n溫馨提醒：如果您今天有出車，請記得回報今日的車趟紀錄喔！🚗`)
-      ])
-      successCount++
-    } catch (err) {
-      console.error(`私訊推播給 ${d.name} 失敗`, err)
+    // 簡單判斷：如果資料庫的時間跟現在很接近 (±8分鐘)
+    if (d.daily_reminder_time && isTimeMatch(d.daily_reminder_time, currentHHMM)) {
+      try {
+        await push(d.line_user_id, [textMessage(`晚安 ${d.name}！🌙\n${reminderMsg}`)])
+        successCount++
+      } catch (err) { console.error(`私訊推播給 ${d.name} 失敗`, err) }
     }
   }
 
   // ==========================================
-  // 2. 發送廣播給 LINE 群組
+  // 2. 發送廣播給 LINE 群組 (檢查時間窗口)
   // ==========================================
   const { data: groups } = await supabase
     .from('line_groups')
-    .select('name, line_group_id')
-    .eq('reminder_enabled', true) // 🌟 只找有開提醒的群組
+    .select('name, line_group_id, reminder_time')
+    .eq('is_reminder_enabled', true) // 🌟 記得對應新欄位名
 
   for (const g of (groups || [])) {
-    try {
-      await push(g.line_group_id, [
-        textMessage(`大家晚安！🌙\n溫馨提醒：今天有出車的夥伴，請記得在系統回報車趟紀錄喔！🚗`)
-      ])
-      successCount++
-    } catch (err) {
-      console.error(`群組推播給 ${g.name} 失敗`, err)
+    if (g.reminder_time && isTimeMatch(g.reminder_time, currentHHMM)) {
+      try {
+        await push(g.line_group_id, [textMessage(reminderMsg.replace('{GroupName}', g.name))])
+        successCount++
+      } catch (err) { console.error(`群組推播給 ${g.name} 失敗`, err) }
     }
   }
 
-  return NextResponse.json({ ok: true, sent: successCount })
+  return NextResponse.json({ ok: true, sent: successCount, time: currentHHMM })
+}
+
+// 輔助函式：判斷時間是否在 8 分鐘誤差範圍內 (配合每 15 分鐘執行一次的 Cron)
+function isTimeMatch(dbTime: string, currentHHMM: string) {
+  // 簡單轉成總分鐘數比較
+  const [h1, m1] = dbTime.split(':').map(Number)
+  const [h2, m2] = currentHHMM.split(':').map(Number)
+  const total1 = h1 * 60 + m1
+  const total2 = h2 * 60 + m2
+  return Math.abs(total1 - total2) <= 8 
 }
