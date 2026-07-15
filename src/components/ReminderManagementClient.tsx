@@ -1,14 +1,16 @@
-import ReminderTimePicker from './ReminderTimePicker' 
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, Bell, BellOff, MessageSquare, Users, User } from 'lucide-react'
+import { Save, MessageSquare, Users, User } from 'lucide-react'
+import ReminderTimePicker from './ReminderTimePicker'
+
+// 🌟 注意：這裡的路徑已經幫你更新到搬家後的 people 目錄下了
 import { 
   updateSystemSetting, 
-  toggleGroupReminder, 
   updateGroupName, 
-  toggleDriverReminder 
-} from '@/app/(dashboard)/vendor-info/reminders/actions'
+  updateGroupReminderSettings, 
+  updateDriverReminderSettings 
+} from '@/app/(dashboard)/people/reminders/actions'
 
 interface Props {
   initialWelcomeMsg: string
@@ -33,15 +35,6 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
     else alert('✅ 歡迎訊息範本已成功更新！')
   }
 
-  // 切換群組開關
-  async function handleToggleGroup(id: string, currentStatus: boolean) {
-    setBusyId(id)
-    const { error } = await toggleGroupReminder(id, !currentStatus)
-    setBusyId(null)
-    if (error) alert(`切換失敗：${error}`)
-    else router.refresh()
-  }
-
   // 修改群組名稱
   async function handleSaveGroupName(id: string) {
     if (!editGroupName.trim()) return
@@ -55,13 +48,17 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
     }
   }
 
-  // 切換司機開關
-  async function handleToggleDriver(id: string, currentStatus: boolean) {
-    setBusyId(id)
-    const { error } = await toggleDriverReminder(id, !currentStatus)
-    setBusyId(null)
-    if (error) alert(`切換失敗：${error}`)
-    else router.refresh()
+  // 🌟 包裝給 ReminderTimePicker 使用的儲存函式，儲存成功後自動重整畫面
+  const handleSaveGroupTime = async (id: string, enabled: boolean, time: string) => {
+    const res = await updateGroupReminderSettings(id, enabled, time)
+    if (!res.error) router.refresh()
+    return res
+  }
+
+  const handleSaveDriverTime = async (id: string, enabled: boolean, time: string) => {
+    const res = await updateDriverReminderSettings(id, enabled, time)
+    if (!res.error) router.refresh()
+    return res
   }
 
   return (
@@ -110,48 +107,50 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>群組名稱 (雙擊可修改)</th>
-                <th style={{ width: 100, textAlign: 'right' }}>定時提醒</th>
+                <th style={{ width: 160, textAlign: 'right' }}>每日報趟提醒</th>
               </tr>
             </thead>
             <tbody>
               {groups.length === 0 ? (
                 <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--text3)', padding: 24 }}>目前尚無綁定任何群組</td></tr>
-              ) : groups.map(g => (
-                <tr key={g.id} style={{ opacity: g.reminder_enabled ? 1 : 0.6 }}>
-                  <td>
-                    {editingGroupId === g.id ? (
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <input type="text" className="input" style={{ padding: '2px 6px', fontSize: 13 }} value={editGroupName} onChange={e => setEditGroupName(e.target.value)} />
-                        <button className="btn btn-primary" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => handleSaveGroupName(g.id)}>儲存</button>
-                        <button className="btn" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditingGroupId(null)}>取消</button>
-                      </div>
-                    ) : (
-                      <span 
-                        style={{ cursor: 'pointer', fontWeight: 600 }} 
-                        title="點擊兩下可修改備註名稱"
-                        onDoubleClick={() => {
-                          setEditingGroupId(g.id)
-                          setEditGroupName(g.name)
-                        }}
-                      >
-                        {g.name}
-                      </span>
-                    )}
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {g.line_group_id.slice(0, 12)}...</div>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className={`badge ${g.reminder_enabled ? 'badge-green' : 'badge-red'}`}
-                      style={{ border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
-                      disabled={busyId === g.id}
-                      onClick={() => handleToggleGroup(g.id, g.reminder_enabled)}
-                    >
-                      {g.reminder_enabled ? <Bell size={12} /> : <BellOff size={12} />}
-                      {g.reminder_enabled ? '已啟報' : '已停報'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              ) : groups.map(g => {
+                // 相容舊欄位與新欄位
+                const isEnabled = g.is_reminder_enabled ?? g.reminder_enabled ?? true
+                return (
+                  <tr key={g.id} style={{ opacity: isEnabled ? 1 : 0.6 }}>
+                    <td>
+                      {editingGroupId === g.id ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <input type="text" className="input" style={{ padding: '2px 6px', fontSize: 13 }} value={editGroupName} onChange={e => setEditGroupName(e.target.value)} />
+                          <button className="btn btn-primary" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => handleSaveGroupName(g.id)}>儲存</button>
+                          <button className="btn" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditingGroupId(null)}>取消</button>
+                        </div>
+                      ) : (
+                        <span 
+                          style={{ cursor: 'pointer', fontWeight: 600 }} 
+                          title="點擊兩下可修改備註名稱"
+                          onDoubleClick={() => {
+                            setEditingGroupId(g.id)
+                            setEditGroupName(g.name)
+                          }}
+                        >
+                          {g.name}
+                        </span>
+                      )}
+                      <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {g.line_group_id.slice(0, 12)}...</div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {/* 🌟 換上新的時間選擇器元件 */}
+                      <ReminderTimePicker
+                        targetId={g.id}
+                        initialEnabled={isEnabled}
+                        initialTime={g.reminder_time?.slice(0, 5) || '20:00'}
+                        onSave={handleSaveGroupTime}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -168,36 +167,40 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>司機姓名</th>
-                <th style={{ width: 100, textAlign: 'right' }}>定時提醒</th>
+                <th style={{ width: 160, textAlign: 'right' }}>每日報趟提醒</th>
               </tr>
             </thead>
             <tbody>
               {drivers.length === 0 ? (
                 <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--text3)', padding: 24 }}>無任何在職司機資料</td></tr>
-              ) : drivers.map(d => (
-                <tr key={d.id} style={{ opacity: d.daily_reminder_enabled ? 1 : 0.6 }}>
-                  <td>
-                    <span style={{ fontWeight: 600 }}>{d.name}</span>
-                    {d.line_user_id ? (
-                      <span style={{ fontSize: 11, color: 'var(--green2)', marginLeft: 8 }}>● 已綁定 LINE</span>
-                    ) : (
-                      <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8 }}>○ 未綁定</span>
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className={`badge ${d.daily_reminder_enabled ? 'badge-green' : 'badge-red'}`}
-                      style={{ border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
-                      disabled={busyId === d.id || !d.line_user_id}
-                      title={!d.line_user_id ? '該司機尚未完成 LINE 帳號綁定，無法開啟提醒。' : '切換提醒狀態'}
-                      onClick={() => handleToggleDriver(d.id, d.daily_reminder_enabled)}
-                    >
-                      {d.daily_reminder_enabled ? <Bell size={12} /> : <BellOff size={12} />}
-                      {d.daily_reminder_enabled ? '已啟報' : '已停報'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              ) : drivers.map(d => {
+                const isEnabled = d.is_daily_reminder_enabled ?? d.daily_reminder_enabled ?? true
+                return (
+                  <tr key={d.id} style={{ opacity: isEnabled ? 1 : 0.6 }}>
+                    <td>
+                      <span style={{ fontWeight: 600 }}>{d.name}</span>
+                      {d.line_user_id ? (
+                        <span style={{ fontSize: 11, color: 'var(--green2)', marginLeft: 8 }}>● 已綁定</span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8 }}>○ 未綁定</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {d.line_user_id ? (
+                        /* 🌟 換上新的時間選擇器元件 */
+                        <ReminderTimePicker
+                          targetId={d.id}
+                          initialEnabled={isEnabled}
+                          initialTime={d.daily_reminder_time?.slice(0, 5) || '20:00'}
+                          onSave={handleSaveDriverTime}
+                        />
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>無法設定</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
