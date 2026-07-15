@@ -168,7 +168,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, initialRem
                       )}
                       <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {g.line_group_id.slice(0, 12)}...</div>
                     </td>
-                    <td style={{ textAlign: 'right',Weight: 200 }}>
+                    <td style={{ textAlign: 'right', fontWeight: 200 }}>
                       <ReminderTimePicker
                         targetId={g.id}
                         initialEnabled={isEnabled}
@@ -206,14 +206,14 @@ export default function ReminderManagementClient({ initialWelcomeMsg, initialRem
                 return (
                   <tr key={d.id} style={{ opacity: isEnabled ? 1 : 0.6 }}>
                     <td>
-                      <span style={{ fontWeight: 600 }}>{d.name}</span>
+                      <span style={{ fontWeight: 200 }}>{d.name}</span>
                       {d.line_user_id ? (
                         <span style={{ fontSize: 11, color: 'var(--green2)', marginLeft: 8 }}>● 已綁定</span>
                       ) : (
                         <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8 }}>○ 未綁定</span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right' ,Weight: 200}}>
+                    <td style={{ textAlign: 'right' , fontWeight: 200}}>
                       {d.line_user_id ? (
                         <ReminderTimePicker
                           targetId={d.id}
