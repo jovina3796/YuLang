@@ -26,6 +26,9 @@ export type DriverInput = {
   display_order:        number | null
   show_in_dashboard:    boolean
   show_in_schedule:     boolean
+  // 🌟 新增：定時提醒相關欄位
+  is_daily_reminder_enabled: boolean
+  daily_reminder_time:  string | null
 }
 
 export async function createDriver(input: DriverInput) {
@@ -35,16 +38,17 @@ export async function createDriver(input: DriverInput) {
     .insert(input)
     .select('id')
     .single()
+  
   if (error) return { error: error.message }
 
   // Best-effort: spin up a login account for the new driver. Skips silently
   // when phone is missing or email already exists; never blocks driver creation.
   if (data?.id) {
     const r = await createUserForDriver(data.id, { adminGuard: false })
-    revalidatePath('/people/drivers')
+    revalidatePath('/drivers') // 統一路由更新路徑
     return { error: null, accountResult: r }
   }
-  revalidatePath('/people/drivers')
+  revalidatePath('/drivers') // 統一路由更新路徑
   return { error: null }
 }
 
