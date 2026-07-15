@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { Save, MessageSquare, Users, User } from 'lucide-react'
 import ReminderTimePicker from './ReminderTimePicker'
 
-// 🌟 注意：這裡的路徑已經幫你更新到搬家後的 people 目錄下了
 import { 
   updateSystemSetting, 
   updateGroupName, 
@@ -107,7 +106,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>群組名稱 (雙擊可修改)</th>
-                <th style={{ width: 160, textAlign: 'right' }}>每日報趟提醒</th>
+                <th style={{ width: 250, textAlign: 'right' }}>每日報趟提醒</th>
               </tr>
             </thead>
             <tbody>
@@ -167,7 +166,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, groups, dr
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>司機姓名</th>
-                <th style={{ width: 160, textAlign: 'right' }}>每日報趟提醒</th>
+                <th style={{ width: 250, textAlign: 'right' }}>每日報趟提醒</th>
               </tr>
             </thead>
             <tbody>
