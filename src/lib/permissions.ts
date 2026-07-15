@@ -11,7 +11,7 @@ export const NAV_HREFS = [
   '/people/drivers',
   '/people/users',
   '/people/permissions',
-  '/people/reminders'
+  '/people/reminders',
   '/schedule',
   '/fuel',
   '/maintenance',
