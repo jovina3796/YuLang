@@ -29,8 +29,7 @@ export async function GET(request: Request) {
     .not('line_user_id', 'is', null)
 
   for (const d of (drivers || [])) {
-    const dbHour = d.daily_reminder_time ? parseInt(d.daily_reminder_time.split(':')[0]) : 20;
-    if (d.last_reminder_date !== today && nowHour >= dbHour) {
+    if (d.last_reminder_date !== today) {
       try {
         await push(d.line_user_id, [textMessage(`晚安 ${d.name}！🌙\n${reminderMsg}`)])
         await supabase.from('drivers').update({ last_reminder_date: today }).eq('id', d.id)
@@ -46,8 +45,7 @@ export async function GET(request: Request) {
     .eq('is_reminder_enabled', true)
 
   for (const g of (groups || [])) {
-    const dbHour = g.reminder_time ? parseInt(g.reminder_time.split(':')[0]) : 20;
-    if (g.last_reminder_date !== today && nowHour >= dbHour) {
+    if (g.last_reminder_date !== today) {
       try {
         await push(g.line_group_id, [textMessage(reminderMsg.replace('{GroupName}', g.name))])
         await supabase.from('line_groups').update({ last_reminder_date: today }).eq('id', g.id)
