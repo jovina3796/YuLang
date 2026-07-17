@@ -213,7 +213,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
     }
 
     // 攔截進階的「車趟查詢」指令 (支援指定月份與司機)
-    if (text && (text.startsWith('車趟查詢') || text.startsWith('查詢車趟'))) {
+    if (text && (text.startsWith('車趟查詢'))) {
       await handleAdvancedTripQuery(replyToken, text, driver.id, driver.name)
       return
     }
@@ -265,11 +265,15 @@ async function handleAdvancedTripQuery(replyToken: string, text: string, default
   let targetMonthStr = ''
   let targetDriverName = ''
 
+  // 1. 抓取日期 (例如 2026-07)
   const matchMonth = text.match(/(\d{4}-\d{2})/)
   if (matchMonth) targetMonthStr = matchMonth[1]
 
-  const matchDriver = text.match(/指定司機\s*(\S+)/)
-  if (matchDriver) targetDriverName = matchDriver[1]
+  // 去除指令本身，並排除日期格式的文字
+  const cleanText = text.replace('車趟查詢', '').replace(targetMonthStr, '').trim()
+  if (cleanText) {
+    targetDriverName = cleanText
+  }
 
   const now = new Date()
   let year = now.getFullYear()
@@ -289,6 +293,7 @@ async function handleAdvancedTripQuery(replyToken: string, text: string, default
   let targetDriverId = defaultDriverId
   let driverDisplayName = defaultDriverName
 
+  // 如果有透過指令傳入名字，則進行查詢
   if (targetDriverName) {
     const { data: d, error } = await supabase
       .from('drivers')
