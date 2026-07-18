@@ -13,32 +13,41 @@ import {
 
 interface Props {
   initialWelcomeMsg: string
-  initialReminderMsg: string // 🌟 新增：接收每日提醒詞
+  initialGroupReminderMsg: string  // 🌟 新增：群組專用的提醒詞
+  initialDriverReminderMsg: string // 🌟 新增：司機專用的提醒詞
   groups: any[]
   drivers: any[]
 }
 
-export default function ReminderManagementClient({ initialWelcomeMsg, initialReminderMsg, groups, drivers }: Props) {
+export default function ReminderManagementClient({ 
+  initialWelcomeMsg, 
+  initialGroupReminderMsg, 
+  initialDriverReminderMsg, 
+  groups, 
+  drivers 
+}: Props) {
   const router = useRouter()
   
-  // 🌟 狀態管理：同時管理兩個訊息
+  // 🌟 狀態管理：拆分成三個獨立的訊息
   const [welcomeMsg, setWelcomeMsg] = useState(initialWelcomeMsg)
-  const [reminderMsg, setReminderMsg] = useState(initialReminderMsg)
+  const [groupReminderMsg, setGroupReminderMsg] = useState(initialGroupReminderMsg)
+  const [driverReminderMsg, setDriverReminderMsg] = useState(initialDriverReminderMsg)
   
   const [savingMsg, setSavingMsg] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [editGroupName, setEditGroupName] = useState('')
 
-  // 🌟 合併儲存：一次把兩個系統設定都寫入資料庫
+  // 🌟 合併儲存：一次把三個系統設定都寫入資料庫
   async function handleSaveMessages() {
     setSavingMsg(true)
     const res1 = await updateSystemSetting('group_welcome_msg', welcomeMsg)
-    const res2 = await updateSystemSetting('daily_reminder_msg', reminderMsg)
+    const res2 = await updateSystemSetting('group_reminder_msg', groupReminderMsg)
+    const res3 = await updateSystemSetting('driver_reminder_msg', driverReminderMsg)
     setSavingMsg(false)
     
-    if (res1.error || res2.error) {
-      alert(`儲存失敗：${res1.error || res2.error}`)
+    if (res1.error || res2.error || res3.error) {
+      alert(`儲存失敗：${res1.error || res2.error || res3.error}`)
     } else {
       alert('✅ 系統訊息範本已成功更新！')
       router.refresh()
@@ -84,7 +93,9 @@ export default function ReminderManagementClient({ initialWelcomeMsg, initialRem
         
         <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          {/* 🌟 版面調整：變成三欄式的 Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+            
             {/* 左側：綁定歡迎詞 */}
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 13, color: 'var(--text3)' }}>🔗 群組綁定成功歡迎詞</span>
@@ -96,22 +107,37 @@ export default function ReminderManagementClient({ initialWelcomeMsg, initialRem
                 onChange={e => setWelcomeMsg(e.target.value)}
                 placeholder="請輸入群組綁定成功的歡迎詞範本..."
               />
-              <span style={{ fontSize: 11, color: 'var(--text3)' }}>💡 提示：輸入 <code>{'{GroupName}'}</code> 將自動替換為真實群組名稱。</span>
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>💡 支援 <code>{'{GroupName}'}</code> 變數自動替換名稱。</span>
             </label>
 
-            {/* 右側：定時提醒詞 (🌟 新增) */}
+            {/* 中間：群組定時提醒詞 */}
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ fontSize: 13, color: 'var(--text3)' }}>⏰ 每日報趟定時提醒詞</span>
+              <span style={{ fontSize: 13, color: 'var(--text3)' }}>👨‍👩‍👧‍👦 群組報趟定時提醒詞</span>
               <textarea
                 className="input"
                 rows={4}
                 style={{ width: '100%', fontFamily: 'inherit', padding: 10, boxSizing: 'border-box', resize: 'vertical' }}
-                value={reminderMsg}
-                onChange={e => setReminderMsg(e.target.value)}
-                placeholder="請輸入每日提醒司機報趟的推播內容... (例如：大家辛苦了！請記得回報今日車趟喔 🚛)"
+                value={groupReminderMsg}
+                onChange={e => setGroupReminderMsg(e.target.value)}
+                placeholder="發送至群組的提醒...(例如：大家辛苦了！請記得回報今日車趟喔 🚛)"
               />
-              <span style={{ fontSize: 11, color: 'var(--text3)' }}>💡 此訊息將依照下方設定的時間，自動推播至群組或私訊。</span>
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>💡 支援 <code>{'{GroupName}'}</code> 變數自動替換名稱。</span>
             </label>
+
+            {/* 右側：司機個人定時提醒詞 */}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 13, color: 'var(--text3)' }}>👤 司機私訊定時提醒詞</span>
+              <textarea
+                className="input"
+                rows={4}
+                style={{ width: '100%', fontFamily: 'inherit', padding: 10, boxSizing: 'border-box', resize: 'vertical' }}
+                value={driverReminderMsg}
+                onChange={e => setDriverReminderMsg(e.target.value)}
+                placeholder="發送給司機的私訊提醒...(例如：請記得點擊下方選單回報車趟喔 🚗)"
+              />
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>💡 系統會自動在最前方加上「晚安 (司機姓名)！🌙」。請勿使用 GroupName 變數。</span>
+            </label>
+
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
@@ -125,7 +151,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, initialRem
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
         
-        {/* 2. 群組管理列表與開關 (保持不變) */}
+        {/* 2. 群組管理列表與開關 */}
         <div className="card">
           <div className="card-head">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -183,7 +209,7 @@ export default function ReminderManagementClient({ initialWelcomeMsg, initialRem
           </table>
         </div>
 
-        {/* 3. 個別司機提醒開關 (保持不變) */}
+        {/* 3. 個別司機提醒開關 */}
         <div className="card">
           <div className="card-head">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
