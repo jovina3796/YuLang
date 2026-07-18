@@ -19,7 +19,8 @@ export async function GET(request: Request) {
 
   // 2. 獲取推播提醒詞 (完美對接前端設定的 daily_reminder_msg)
   const { data: settings } = await supabase.from('system_settings').select('key, value')
-  const reminderMsg = settings?.find(s => s.key === 'daily_reminder_msg')?.value || '請記得回報今日車趟喔！'
+  const groupReminderMsg = settings?.find(s => s.key === 'group_reminder_msg')?.value || '提醒~ 今天回報車趟了嗎？'
+  const driverReminderMsg = settings?.find(s => s.key === 'driver_reminder_msg')?.value || '提醒~ 今天回報車趟了嗎？'
 
   let successCount = 0
 
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
     // 只要今天還沒發過就發送 (繞過 Vercel 執行時間不精準的問題)
     if (d.last_reminder_date !== today) {
       try {
-        await push(d.line_user_id, [textMessage(`晚安 ${d.name}！🌙\n${reminderMsg}`)])
+        await push(d.line_user_id, [textMessage(`晚安 ${d.name}！🌙\n${driverReminderMsg}`)])
         await supabase.from('drivers').update({ last_reminder_date: today }).eq('id', d.id)
         successCount++
       } catch (err) { 
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
     if (g.last_reminder_date !== today) {
       try {
         // 替換前端設定可能包含的 {GroupName} 變數
-        const finalGroupMsg = reminderMsg.replace(/{GroupName}/g, g.name || '此群組')
+        const finalGroupMsg = groupReminderMsg.replace(/{GroupName}/g, g.name || '此群組')
         await push(g.line_group_id, [textMessage(finalGroupMsg)])
         await supabase.from('line_groups').update({ last_reminder_date: today }).eq('id', g.id)
         successCount++
