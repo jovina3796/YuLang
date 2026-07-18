@@ -7,8 +7,10 @@ export async function updateSystemSetting(key: string, value: string) {
   const supabase = createServiceClient()
   const { error } = await supabase
     .from('system_settings')
-    .update({ value: value.trim() })
-    .eq('key', key)
+    .upsert(
+      { key: key, value: value.trim() }, 
+      { onConflict: 'key' } 
+    )
 
   if (error) return { error: error.message }
   revalidatePath('/people/reminders') 
