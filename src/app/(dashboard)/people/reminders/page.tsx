@@ -21,7 +21,7 @@ export default async function ReminderSettingsPage() {
     // 3. 撈取在職司機，並包含提醒時間與開關狀態
     supabase
       .from('drivers')
-      .select('id, name, line_user_id, daily_reminder_enabled, is_daily_reminder_enabled, daily_reminder_time')
+      .select('id, name, line_user_id, is_daily_reminder_enabled, daily_reminder_time')
       .eq('status', 'active')
       .order('name')
   ])
