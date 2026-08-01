@@ -33,11 +33,14 @@ export function exportTripsByVendor({ trips, startDate, endDate, driverName }: E
 
     // 🌟 在這裡自訂 Excel 裡面要顯示的欄位與順序
     groupedData[vendorName].push({
-      '出發日期': trip.departed_at ? new Date(trip.departed_at).toLocaleDateString('zh-TW') : '',
-      '單號': trip.trip_code || '',
-      '起點': trip.origin || '',
-      '終點': trip.destination_area || '',
-      '趟次': trip.trip_count || 1,
+      '日期': trip.departed_at ? new Date(trip.departed_at).toLocaleDateString('zh-TW') : '',
+      '司機姓名': trip.drivers?.name || '',
+      '業務': trip.vendor_rate_rules?.service_type || '未指定',
+      '趟數': trip.trip_count || 1,
+      '區域': trip.destination_area || '-',
+      '店點/籃件': trip.actual_stops || '',
+      '特殊加成': trip.surcharge_name || '-',
+      'KPI達標': trip.is_kpi_achieved ? 'V' : '',
       '結算運費': trip.final_fare || 0,
       '備註': trip.notes || ''
     })
@@ -52,11 +55,14 @@ export function exportTripsByVendor({ trips, startDate, endDate, driverName }: E
     
     // 設定欄寬 (選用，讓版面更好看)
     const colWidths = [
-      { wch: 12 }, // 出發日期
-      { wch: 15 }, // 單號
-      { wch: 15 }, // 起點
-      { wch: 15 }, // 終點
-      { wch: 8 },  // 趟次
+      { wch: 12 }, // 日期
+      { wch: 15 }, // 司機姓名
+      { wch: 15 }, // 業務
+      { wch: 8 }, // 趟數
+      { wch: 15 },  // 區域
+      { wch: 15 },  // 店點/籃件
+      { wch: 15 },  // 特殊加成
+      { wch: 8 },  // KPI
       { wch: 10 }, // 結算運費
       { wch: 20 }, // 備註
     ]
