@@ -21,7 +21,8 @@ export async function GET(request: Request): Promise<Response> {
     .maybeSingle()
   if (!driver) return Response.json({ error: 'driver_not_bound' }, { status: 403 })
 
-  const [{ data: vehicles }, { data: vendors }, { data: rateRules }, { data: aliases }] = await Promise.all([
+  // 🌟 1. 在這裡多解構一個 { data: surcharges }
+  const [{ data: vehicles }, { data: vendors }, { data: rateRules }, { data: aliases }, { data: surcharges }] = await Promise.all([
     supabase.from('vehicles').select('id, plate_number').eq('status', 'active').order('plate_number'),
     supabase.from('vendors')
       .select('id, name, warehouse')
@@ -33,6 +34,9 @@ export async function GET(request: Request): Promise<Response> {
       .order('display_order', { ascending: true, nullsFirst: false })
       .order('service_type'),
     supabase.from('subroute_aliases').select('alias, billing_area').order('alias'),
+    
+    // 🌟 2. 加上這行：撈取所有啟用的特殊加成項目
+    supabase.from('vendor_surcharges').select('id, vendor_id, name, rate').eq('is_active', true).order('name'),
   ])
 
   const resolvedVehicleId = await resolveVehicleForDriver(driver.id)
@@ -43,6 +47,7 @@ export async function GET(request: Request): Promise<Response> {
     vendors:   vendors   ?? [],
     rateRules: rateRules ?? [],
     aliases:   aliases   ?? [],
+    surcharges: surcharges ?? [], // 🌟 3. 將加成資料回傳給前端 LIFF
     resolvedVehicleId,
   })
 }
