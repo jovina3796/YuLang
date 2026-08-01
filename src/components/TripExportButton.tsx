@@ -24,7 +24,7 @@ export default function TripExportButton({ trips, startDate, endDate, driverName
         alignItems: 'center', 
         gap: '6px',
         padding: '6px 12px',
-        background: 'var(--green2)',
+        background: '#006030',
         color: '#fff',
         border: 'none',
         borderRadius: '6px',
