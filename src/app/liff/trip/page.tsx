@@ -21,6 +21,9 @@ type RateRule = {
   display_order: number | null
 }
 type AliasRow = { alias: string; billing_area: string }
+// 🌟 1. 新增 Surcharge 型別
+type Surcharge = { id: string; vendor_id: string; name: string; rate: number }
+
 type Config = {
   driver: { id: string; name: string }
   vehicles: Vehicle[]
@@ -28,9 +31,11 @@ type Config = {
   rateRules: RateRule[]
   aliases: AliasRow[]
   resolvedVehicleId: string | null
+  surcharges: Surcharge[] // 🌟 2. 將 surcharges 放入 Config 中
 }
 
-function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boolean, isSpecial: boolean): number {
+// 🌟 3. 更新運費計算邏輯，將特殊加成的固定金額 (surchargeRate) 加上去
+function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boolean, isSpecial: boolean, surchargeRate: number = 0): number {
   let fare = 0
   const bundle  = Math.max(1, rule.base_trips ?? 1)
   const bundles = Math.ceil(tripCount / bundle)
@@ -49,7 +54,8 @@ function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boole
       fare = ((rule.base_fare ?? 0) + stops * (rule.surcharge_per_stop ?? 0)) * bundles; break
   }
   if (isSpecial && rule.special_rate) fare = fare * (1 + rule.special_rate)
-  return Math.round(fare)
+  
+  return Math.round(fare) + surchargeRate // 🌟 加上特殊加成費用
 }
 
 export default function TripLiffPage() {
@@ -72,6 +78,7 @@ export default function TripLiffPage() {
   const [isKpi, setIsKpi]               = useState(true)
   const [isSpecial, setIsSpecial]       = useState(false)
   const [notes, setNotes]               = useState('')
+  const [surchargeId, setSurchargeId]   = useState('') // 🌟 4. 新增選擇特殊加成的 State
 
   useEffect(() => {
     if (!liffId) { setErrorMsg('LIFF ID 未設定，請聯絡管理員。'); setStage('error'); return }
@@ -113,7 +120,6 @@ export default function TripLiffPage() {
     return () => { alive = false }
   }, [liffId])
 
-  // 業務 dropdown：去重後的 service_type 列表
   const serviceTypes = useMemo(() => {
     if (!config) return []
     const seen = new Set<string>()
@@ -124,13 +130,11 @@ export default function TripLiffPage() {
     return out
   }, [config])
 
-  // 同業務的所有費率規則
   const svcRules = useMemo(() => {
     if (!config || !svcType) return []
     return config.rateRules.filter(r => r.service_type === svcType)
   }, [config, svcType])
 
-  // 同業務的可選廠商（去重）
   const svcVendors = useMemo(() => {
     if (!config) return []
     const ids = new Set(svcRules.map(r => r.vendor_id))
@@ -139,7 +143,6 @@ export default function TripLiffPage() {
 
   const showVendorPicker = svcVendors.length > 1
 
-  // 同業務+廠商的可選計價區域
   const availableAreas = useMemo(() => {
     const seen = new Set<string>()
     const out: string[] = []
@@ -152,7 +155,6 @@ export default function TripLiffPage() {
     return out
   }, [svcRules, vendorId])
 
-  // 計價區域對應的配送區域 dropdown
   const deliveryOptions = useMemo(() => {
     if (!config || !area) return []
     return config.aliases.filter(a => a.billing_area === area).map(a => a.alias)
@@ -166,14 +168,24 @@ export default function TripLiffPage() {
     ) ?? null
   }, [svcRules, vendorId, area, availableAreas.length, svcType])
 
+  // 🌟 5. 過濾出當前選擇廠商的特殊加成選項
+  const vendorSurcharges = useMemo(() => {
+    if (!config || !vendorId || !config.surcharges) return []
+    return config.surcharges.filter(s => s.vendor_id === vendorId)
+  }, [config, vendorId])
+
+  // 取得當前選中的特殊加成物件
+  const selectedSurcharge = vendorSurcharges.find(s => s.id === surchargeId)
+
   const stops      = actualStops === '' ? 0 : Number(actualStops)
   const isKpiBased = matchedRule?.pricing_mode === 'base_or_kpi'
   const isPerStop  = matchedRule?.pricing_mode === 'per_stop_count'
   const showStops  = !!matchedRule && (matchedRule.base_stops != null || matchedRule.surcharge_per_stop != null)
   const showSpecial = !!matchedRule?.special_rate
-  const autoFare   = matchedRule ? calcFare(matchedRule, tripCount, stops, isKpiBased ? isKpi : false, showSpecial && isSpecial) : null
+  
+  // 🌟 將選中的特殊加成金額 (selectedSurcharge?.rate) 傳入運費計算中
+  const autoFare   = matchedRule ? calcFare(matchedRule, tripCount, stops, isKpiBased ? isKpi : false, showSpecial && isSpecial, selectedSurcharge?.rate ?? 0) : null
 
-  // 業務改變：自動帶入預設廠商（is_service_default），再帶區域
   function applyService(s: string) {
     setSvcType(s)
     if (!config) return
@@ -181,12 +193,11 @@ export default function TripLiffPage() {
     const def = rules.find(r => r.is_service_default) ?? rules[0]
     const newVendorId = def?.vendor_id ?? ''
     setVendorId(newVendorId)
-    // 帶區域：以新廠商為準
     const vendorRules = rules.filter(r => r.vendor_id === newVendorId)
     const firstArea = vendorRules.find(r => r.destination_area)?.destination_area ?? ''
     setArea(firstArea)
     setDeliveryArea('')
-    setTripCount(1); setActualStops(''); setIsKpi(true); setIsSpecial(false)
+    setTripCount(1); setActualStops(''); setIsKpi(true); setIsSpecial(false); setSurchargeId('') // 🌟 切換業務時重置選項
   }
 
   function applyVendor(vid: string) {
@@ -195,6 +206,7 @@ export default function TripLiffPage() {
     const firstArea = vendorRules.find(r => r.destination_area)?.destination_area ?? ''
     setArea(firstArea)
     setDeliveryArea('')
+    setSurchargeId('') // 🌟 切換廠商時重置選項
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -218,6 +230,8 @@ export default function TripLiffPage() {
           is_kpi_achieved:  isKpiBased ? isKpi : null,
           is_special:       showSpecial ? isSpecial : false,
           destination_area: deliveryArea || null,
+          surcharge_name:   selectedSurcharge ? selectedSurcharge.name : null, // 🌟 送出特殊加成名稱
+          surcharge_rate:   selectedSurcharge ? selectedSurcharge.rate : null, // 🌟 送出特殊加成費用
           notes:            notes || null,
         }),
       })
@@ -251,6 +265,7 @@ export default function TripLiffPage() {
         <div style={{ fontSize: 12, color: '#2d3a52', marginBottom: 16 }}>車輛：{resolvedVehiclePlate}</div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* 日期、業務、廠商、區域等維持原樣 */}
           <Field label="日期">
             <input type="date" required value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
           </Field>
@@ -301,6 +316,18 @@ export default function TripLiffPage() {
             <Field label={stopsLabel}>
               <input type="number" min={0} inputMode="numeric" value={actualStops}
                      onChange={e => setActualStops(e.target.value)} style={inputStyle} />
+            </Field>
+          )}
+
+          {/* 🌟 新增：專屬的特殊加成下拉選單 (只有當該廠商有設定加成時才顯示) */}
+          {vendorSurcharges.length > 0 && (
+            <Field label="特殊加成 (選填)">
+              <select value={surchargeId} onChange={e => setSurchargeId(e.target.value)} style={inputStyle}>
+                <option value="">— 無 —</option>
+                {vendorSurcharges.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} (+{s.rate})</option>
+                ))}
+              </select>
             </Field>
           )}
 
