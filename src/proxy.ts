@@ -8,8 +8,8 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   request.headers.set('x-pathname', pathname)
 
-  // LINE webhook (and any future public API) bypasses auth entirely.
-  if (pathname.startsWith('/api/line/') || pathname.startsWith('/liff/')) {
+  // 🌟 修改這裡：把 /api/cron/ 加入免驗證白名單中！
+  if (pathname.startsWith('/api/line/') || pathname.startsWith('/liff/') || pathname.startsWith('/api/cron/')) {
     return NextResponse.next({ request })
   }
 
