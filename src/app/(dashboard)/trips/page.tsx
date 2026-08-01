@@ -10,6 +10,7 @@ import { Check } from 'lucide-react'
 import { getCurrentProfile } from '@/lib/auth'
 import { loadScopeFor } from '@/lib/rolePermissions.server'
 import DriverFilter from '@/components/DriverFilter' 
+import TripExportButton from '@/components/TripExportButton'
 
 export default async function TripsPage({ searchParams }: { searchParams: Promise<any> }) {
   const supabase = createServiceClient()
@@ -73,6 +74,9 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const win = resolvePageWindow(totalRows, pageRaw, pageSizeRaw)
   const pageTrips = trips?.slice(win.startIdx, win.endIdx) ?? []
 
+  const selectedDriver = drivers?.find((d: any) => d.id === driverId)
+  const driverNameForExport = selectedDriver ? selectedDriver.name : '全體司機'
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -81,6 +85,15 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
         <DriverFilter drivers={drivers ?? []} /> 
         
         <div style={{ flex: 1 }} />
+
+        {/* 🌟 3. 將匯出按鈕放在這裡，並把查詢參數傳給它 */}
+        <TripExportButton 
+          trips={trips ?? []} // 注意：這裡傳入的是尚未 slice 的全部資料！
+          startDate={from || ''} 
+          endDate={to || ''} 
+          driverName={driverNameForExport} 
+        />
+
         {!scopedToSelf && (
           <>
             <TripImportExport />
@@ -89,7 +102,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               rateRules={rateRules ?? []}
               drivers={drivers ?? []}
               vehicles={vehicles ?? []}
-              surcharges={surcharges ?? []} // 🌟 記得傳入！
+              surcharges={surcharges ?? []}
               mode="create"
             />
           </>
