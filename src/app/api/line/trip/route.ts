@@ -10,17 +10,6 @@ export const dynamic = 'force-dynamic'
 
 // POST /api/line/trip — used by the LIFF form to submit one trip.
 // Auth: Authorization: Bearer <LIFF access token>
-// Body: application/json
-//   logged_at:        YYYY-MM-DD (required)
-//   vendor_id:        uuid (required)
-//   rate_rule_id:     uuid (required)
-//   vehicle_id:       uuid (optional; auto-resolved)
-//   trip_count:       number (required, >=1)
-//   actual_stops:     number (optional)
-//   is_kpi_achieved:  boolean (optional)
-//   is_special:       boolean (optional)
-//   destination_area: string (optional)
-//   notes:            string (optional)
 export async function POST(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization') ?? ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
@@ -51,6 +40,11 @@ export async function POST(request: Request): Promise<Response> {
   const isKpi       = body.is_kpi_achieved == null ? null : Boolean(body.is_kpi_achieved)
   const isSpecial   = Boolean(body.is_special ?? false)
   const destArea    = (body.destination_area ? String(body.destination_area) : '').trim() || null
+  
+  // 🌟 1. 接收前端傳來的特殊加成資料
+  const surchargeName = (body.surcharge_name ? String(body.surcharge_name) : '').trim() || null
+  const surchargeRate = Number(body.surcharge_rate ?? 0)
+  
   const notes       = (body.notes ? String(body.notes) : '').trim() || null
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(loggedAt) || isNaN(Date.parse(loggedAt))) {
@@ -82,17 +76,18 @@ export async function POST(request: Request): Promise<Response> {
   const isKpiFinal = isKpiBased ? (isKpi ?? true) : null
   const isSpecialFinal = rule.special_rate ? isSpecial : false
 
-  // 1. 🌟 解構出最終運費數字 (finalFare)
-  const { finalFare } = calcFare(rule, Math.round(tripCount), actualStops ?? 0, isKpiFinal ?? false, isSpecialFinal)
+  // 🌟 2. 取得基礎運費，並將「特殊加成費用」加上去，得出最終結算運費
+  const { finalFare: baseFinalFare } = calcFare(rule, Math.round(tripCount), actualStops ?? 0, isKpiFinal ?? false, isSpecialFinal)
+  const finalFare = baseFinalFare + surchargeRate 
 
-  // 2. 🌟 呼叫抽成計算工具，算出抽成比例 (%) 與司機實拿運費 (傳入 finalFare)
+  // 3. 呼叫抽成計算工具，算出抽成比例 (%) 與司機實拿運費
   const fareInfo = await calculateTripCommission(
     driver.id,  // 司機 ID
     vendorId,   // 廠商 ID
-    finalFare   // 剛剛算出的總運費
+    finalFare   // 已經包含特殊加成的總運費
   );
 
-  // 3. 把原本的所有欄位加上算出的抽成資料，一起寫入資料庫
+  // 4. 寫入資料庫
   const { error: insErr } = await supabase.from('trips').insert({
     vendor_id:         vendorId,
     rate_rule_id:      rateRuleId,
@@ -103,16 +98,19 @@ export async function POST(request: Request): Promise<Response> {
     actual_stops:      actualStops,
     is_kpi_achieved:   isKpiFinal,
     is_special:        isSpecialFinal,
-    calculated_fare:   finalFare, // 🌟 更新寫入 finalFare
-    final_fare:        finalFare, // 🌟 更新寫入 finalFare
+    
+    // 🌟 5. 新增寫入兩個特殊加成欄位
+    surcharge_name:    surchargeName, 
+    surcharge_rate:    surchargeRate, 
+    
+    calculated_fare:   finalFare,
+    final_fare:        finalFare,
     trip_count:        Math.round(tripCount),
     notes,
     status:            'completed',
-    // 👇 這裡就是新增的兩個關鍵抽成欄位！
-    commission_rate:   fareInfo.commission_rate,    // 該筆車趟適用的抽成比例 (%)
-    driver_final_fare: fareInfo.driver_final_fare,  // 扣除抽成後，司機實際應領的金額
+    commission_rate:   fareInfo.commission_rate, 
+    driver_final_fare: fareInfo.driver_final_fare,
   })
-
   
   if (insErr) {
     console.error('[api.line.trip] insert failed', insErr)
@@ -136,11 +134,11 @@ export async function POST(request: Request): Promise<Response> {
       service:    (rule as { service_type: string | null }).service_type,
       trip_count: Math.round(tripCount),
       stops:      actualStops,
-      fare:       finalFare, // 🌟 更新推播 finalFare
+      fare:       finalFare, 
       is_kpi:     isKpiFinal,
       is_special: isSpecialFinal,
     })),
   ])
 
-  return Response.json({ ok: true, fare: finalFare }) // 🌟 更新回傳 finalFare
+  return Response.json({ ok: true, fare: finalFare }) 
 }
