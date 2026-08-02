@@ -55,7 +55,9 @@ function calcFare(rule: RateRule, tripCount: number, stops: number, isKpi: boole
   }
   if (isSpecial && rule.special_rate) fare = fare * (1 + rule.special_rate)
   
-  return Math.round(fare) + surchargeRate // 🌟 加上特殊加成費用
+  // 🌟 修正：將固定金額相加，改為乘上百分比，再四捨五入
+  fare = fare * (1 + surchargeRate)
+  return Math.round(fare)
 }
 
 export default function TripLiffPage() {
