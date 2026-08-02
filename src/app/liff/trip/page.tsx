@@ -327,7 +327,9 @@ export default function TripLiffPage() {
               <select value={surchargeId} onChange={e => setSurchargeId(e.target.value)} style={inputStyle}>
                 <option value="">— 無 —</option>
                 {vendorSurcharges.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (+{s.rate})</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name} (+{s.rate * 100}%)
+                  </option>
                 ))}
               </select>
             </Field>
