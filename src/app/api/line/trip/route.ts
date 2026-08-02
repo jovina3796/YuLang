@@ -78,7 +78,7 @@ export async function POST(request: Request): Promise<Response> {
 
   // 🌟 2. 取得基礎運費，並將「特殊加成費用」加上去，得出最終結算運費
   const { finalFare: baseFinalFare } = calcFare(rule, Math.round(tripCount), actualStops ?? 0, isKpiFinal ?? false, isSpecialFinal)
-  const finalFare = baseFinalFare + surchargeRate 
+  const finalFare = Math.round(baseFinalFare * (1 + surchargeRate))
 
   // 3. 呼叫抽成計算工具，算出抽成比例 (%) 與司機實拿運費
   const fareInfo = await calculateTripCommission(
