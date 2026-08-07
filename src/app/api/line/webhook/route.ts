@@ -22,7 +22,7 @@ type LineMessage =
   | { type: 'image'; id: string }
   | { type: 'video' | 'audio' | 'file' | 'location' | 'sticker'; id: string }
 
-// 🌟 擴充 LineEvent 型別，支援 join 事件與群組 ID
+// 🌟 擴充 LineEvent 型別，支援 join 事件與群組 ID，以及 postback (按鈕點擊)
 type LineEvent =
   | {
       type: 'message'
@@ -43,6 +43,12 @@ type LineEvent =
       type: 'join'
       replyToken: string
       source: { type: string; groupId?: string; roomId?: string }
+    }
+  | {
+      type: 'postback'
+      replyToken: string
+      source: { type: string; userId?: string; groupId?: string; roomId?: string }
+      postback: { data: string }
     }
   | { type: string; replyToken?: string; source?: { userId?: string; groupId?: string; roomId?: string } }
 
@@ -143,13 +149,42 @@ async function handleEvent(event: LineEvent): Promise<void> {
       await startBinding(userId, replyToken)
       return
     }
+    
+    // 🌟 2. 攔截按鈕點擊 (Postback) 事件：例如「撤回車趟」
+    if (event.type === 'postback') {
+      const pbEvent = event as Extract<LineEvent, { type: 'postback' }>
+      const data = pbEvent.postback.data
+      
+      // 解析傳遞過來的隱藏指令，例如：action=undo_trip&ids=uuid1,uuid2
+      const params = new URLSearchParams(data)
+      const action = params.get('action')
+      const idsStr = params.get('ids')
+
+      if (action === 'undo_trip' && idsStr) {
+        const ids = idsStr.split(',')
+        const supabase = createServiceClient()
+        
+        const { error } = await supabase
+          .from('trips')
+          .delete()
+          .in('id', ids)
+
+        if (error) {
+          console.error('[line.webhook] Undo trip failed', error)
+          await reply(replyToken, [textMessage(`❌ 撤回失敗，請稍後再試。(${error.message})`)])
+        } else {
+          await reply(replyToken, [textMessage('🗑️ 剛才回報的車趟已成功撤回，請重新報趟！')])
+        }
+        return
+      }
+    }
 
     if (event.type !== 'message') return
     const msg = (event as Extract<LineEvent, { type: 'message' }>).message
     const text = msg.type === 'text' ? msg.text.trim() : null
     const imageId = msg.type === 'image' ? msg.id : null
 
-    // 🌟 2. 攔截群組手動綁定指令 (放在最前面，避免非司機成員被擋)
+    // 🌟 3. 攔截群組手動綁定指令 (放在最前面，避免非司機成員被擋)
     if (text && text.startsWith('/綁定群組')) {
       const groupId = source.groupId || source.roomId;
       if (!groupId) {
@@ -167,13 +202,12 @@ async function handleEvent(event: LineEvent): Promise<void> {
     const driver = await findDriverByLineUserId(userId)
     const session = await loadSession(userId)
     
-    // 🌟 就是這行！請務必確認有把它加進來，定義 isGroup 變數
     const isGroup = source?.type === 'group' || source?.type === 'room'
 
     // 未綁定 → 處理邏輯
     if (!driver) {
       if (isGroup) {
-        // 🌟 【防呆機制】：在群組中，未綁定的人發言，機器人直接「已讀不回」裝死
+        // 【防呆機制】：在群組中，未綁定的人發言，機器人直接「已讀不回」裝死
         // 除非他明確打出想綁定的指令，才引導他
         if (text && text.trim() === '/綁定') {
           await startBinding(userId, replyToken)
