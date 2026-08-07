@@ -28,12 +28,12 @@ type ResolvedTrip = {
   stops:       number | null
   fare:        number
   vendor_label: string
-  // 🌟 新增：紀錄這趟套用的特殊加成快照
+  // 🌟 紀錄這趟套用的特殊加成快照
   surcharge_name: string | null
   surcharge_rate: number
 }
 
-// 🌟 新增：定義從資料庫撈出來的特殊加成規則型別
+// 🌟 定義從資料庫撈出來的特殊加成規則型別
 type SurchargeRule = {
   vendor_id: string
   name: string
@@ -45,10 +45,10 @@ const ADMIN_ROLES = ['admin', 'owner']
 
 const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2}[號日]?|\d{1,2}\/\d{1,2})(\s|$)/
 
-// 🌟 新增：允許使用 + 號作為「今天」的極短快捷鍵
+// 🌟 允許使用 + 號作為「今天」的極短快捷鍵
 const QUICK_TODAY_RE = /^\+(\s*)/
 
-// 🌟 新增：隱式指定（直接打名字），抓取 2-4 個中文字，且後面緊接日期或 + 號
+// 🌟 隱式指定（直接打名字），抓取 2-4 個中文字，且後面緊接日期或 + 號
 const IMPLICIT_NAME_RE = /^([\u4e00-\u9fa5]{2,4})\s*(?=(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月|\d{1,2}\/|\+))/
 
 const ASSIGN_DRIVER_HEAD_RE = /^指定司機[：:]\s*(\S+)\s+/
@@ -64,8 +64,22 @@ export function looksLikeTripText(text: string): boolean {
     stripped = stripped.slice(implicitMatch[1].length).trim()
   }
 
-  // 只要是日期開頭，或是 + 號開頭，才放行進入報趟解析器
-  return DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)
+  // 1. 如果有明確的日期或 + 號開頭，絕對是車趟
+  if (DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)) return true
+
+  // 2. 🌟 如果沒有日期，排除明顯的聊天標點與語氣詞 (避免把正常聊天當作車趟)
+  const chatPunctuation = /[，。！？、,!?嗎呢啊呀吧囉喔哈]/
+  if (chatPunctuation.test(stripped)) return false
+
+  // 3. 🌟 判斷是否有車趟特徵：包含數字 (店點/趟數) 或是休假
+  // 例如：「冷鏈楊梅5 深坑5 低鮮」一定有數字
+  if (/\d/.test(stripped)) return true
+  if (/^(休|休假|請假)$/.test(stripped)) return true
+
+  // 4. 🌟 若包含空格且有一定長度，可能是省略數字的純業務文字 (如「全聯 瑞芳」)
+  if (/\s/.test(stripped) && stripped.length > 3) return true
+
+  return false
 }
 
 function extractAssignedDriver(text: string): { name: string; remaining: string; isExplicit: boolean } | null {
@@ -147,9 +161,13 @@ export async function handleTripText(
   
   const services = Array.from(new Set(rules.map(r => r.service_type).filter(Boolean)))
 
-  // 🌟 核心小魔術：如果司機是用 + 開頭，我們在背景偷偷幫他補上「今天 」
+  // 🌟 核心小魔術：補上日期前綴，讓後續解析器能看懂
   if (QUICK_TODAY_RE.test(parseText)) {
+    // 如果司機是用 + 開頭，轉換成「今天 」
     parseText = parseText.replace(QUICK_TODAY_RE, '今天 ')
+  } else if (!DATE_TOKEN_RE.test(parseText)) {
+    // 🌟 如果完全沒有打日期，自動在最前面補上「今天 」
+    parseText = `今天 ${parseText}`
   }
 
   // 🌟 將合法關鍵字傳給解析引擎
@@ -188,9 +206,7 @@ export async function handleTripText(
       let appliedSurchargeName: string | null = null
       let appliedSurchargeRate: number = 0
       
-      // 如果司機在當天的訊息裡有打加成關鍵字
       if (day.surcharges && day.surcharges.length > 0) {
-        // 從資料庫清單中，找看看有沒有「該廠商」且「關鍵字相符」的方案
         const matchingSurcharge = surcharges.find(
           s => s.vendor_id === r.rule.vendor_id && day.surcharges.includes(s.keyword)
         )
@@ -200,7 +216,7 @@ export async function handleTripText(
         }
       }
 
-      // 🌟 呼叫剛升級的核心計價引擎（傳入颱風假等方案的加成比例）
+      // 🌟 呼叫計價引擎（傳入颱風假等方案的加成比例）
       const { finalFare } = calcFare(
         r.rule, 
         1, 
@@ -214,7 +230,7 @@ export async function handleTripText(
       const v = Array.isArray(vRaw) ? vRaw[0] ?? null : vRaw
       const vendorLabel = v ? `${v.name}${v.warehouse ? `／${v.warehouse}` : ''}` : ''
       
-      // 🌟 加上特殊加成標記，如果有的話，顯示在 LINE 泡泡卡片上讓司機安心
+      // 🌟 加上特殊加成標記
       const finalVendorLabel = appliedSurchargeName ? `${vendorLabel} (${appliedSurchargeName})` : vendorLabel
 
       dayResolved.push({ 
@@ -263,10 +279,8 @@ export async function handleTripText(
         trip_count:       1,
         notes:            null as string | null,
         status:           'completed',
-        // 例外抽成紀錄
         commission_rate:   fareInfo.commission_rate,
         driver_final_fare: fareInfo.driver_final_fare,
-        // 🌟 特殊方案加成紀錄 (颱風假等)
         surcharge_name:    rt.surcharge_name,
         surcharge_rate:    rt.surcharge_rate,
       })
