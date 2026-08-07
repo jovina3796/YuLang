@@ -58,25 +58,25 @@ const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
 export function looksLikeTripText(text: string): boolean {
   let stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
   
-  // 🌟 如果開頭是中文名字，先假裝它不存在，繼續往後看是不是日期
+  // 隱式指定：如果開頭是中文名字，先假裝它不存在
   const implicitMatch = stripped.match(IMPLICIT_NAME_RE)
   if (implicitMatch) {
     stripped = stripped.slice(implicitMatch[1].length).trim()
   }
 
-  // 1. 如果有明確的日期或 + 號開頭，絕對是車趟
+  // 🌟 1. 【超強閒聊過濾器】：如果句子裡有這些代名詞或語氣詞，絕對是閒聊，直接忽略！
+  // (刻意不阻擋逗號或空白，因為司機報趟時常常用來分隔)
+  const chatFeatures = /[嗎呢啊呀吧囉喔哈我你他她去買吃]+/
+  if (chatFeatures.test(stripped)) return false
+
+  // 2. 如果有明確的日期或 + 號開頭，視為車趟
   if (DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)) return true
 
-  // 2. 🌟 如果沒有日期，排除明顯的聊天標點與語氣詞 (避免把正常聊天當作車趟)
-  const chatPunctuation = /[，。！？、,!?嗎呢啊呀吧囉喔哈]/
-  if (chatPunctuation.test(stripped)) return false
-
-  // 3. 🌟 判斷是否有車趟特徵：包含數字 (店點/趟數) 或是休假
-  // 例如：「冷鏈楊梅5 深坑5 低鮮」一定有數字
+  // 3. 如果包含數字 (店點/趟數) 或是休假，視為車趟
   if (/\d/.test(stripped)) return true
   if (/^(休|休假|請假)$/.test(stripped)) return true
 
-  // 4. 🌟 若包含空格且有一定長度，可能是省略數字的純業務文字 (如「全聯 瑞芳」)
+  // 4. 若包含空格且長度適中，可能是省略數字的純業務文字 (如「全聯 瑞芳」)
   if (/\s/.test(stripped) && stripped.length > 3) return true
 
   return false
