@@ -20,6 +20,8 @@ type ParsedRow = {
   isKpi:       boolean | null
   isSpecial:   boolean
   notes:       string
+  // 🌟 新增單號欄位 (供 Upsert 覆蓋使用)
+  tripCode?:   string
 }
 
 type RuleFull = {
@@ -108,6 +110,10 @@ export async function importTripsCsv(csvText: string): Promise<{
     const fareStr  = get('運費')
     const kpiStr   = get('KPI達標')
     const specStr  = get('加成費')
+    
+    // 🌟 讀取單號欄位，作為覆蓋依據
+    const tripCodeStr = get('單號') 
+
     parsed.push({
       line:        r + 1,
       date,
@@ -124,6 +130,7 @@ export async function importTripsCsv(csvText: string): Promise<{
       isKpi:       kpiStr === '' ? null : /^[YyTt1]/.test(kpiStr),
       isSpecial:   specStr === '' ? false : /^[YyTt1]/.test(specStr),
       notes:       get('備註'),
+      tripCode:    tripCodeStr === '' ? undefined : tripCodeStr // 🌟 存入解析結果
     })
   }
 
@@ -175,6 +182,8 @@ export async function importTripsCsv(csvText: string): Promise<{
     const vehicleId = p.plate      ? vehicleMap.get(p.plate)       ?? null : null
 
     inserts.push({
+      // 🌟 如果有單號，就塞進去準備覆蓋；沒有就讓資料庫自動生成新單號
+      ...(p.tripCode ? { trip_code: p.tripCode } : {}), 
       vendor_id:        vid,
       rate_rule_id:     rule.id,
       driver_id:        driverId,
@@ -193,7 +202,7 @@ export async function importTripsCsv(csvText: string): Promise<{
 
   if (inserts.length === 0) return { ok: false, inserted: 0, errors }
 
-  // 🌟 新增：批次處理每一筆匯入的車趟，自動抓取該司機與廠商對應的抽成 % 與金額
+  // 批次處理每一筆匯入的車趟，自動抓取該司機與廠商對應的抽成 % 與金額
   const insertsWithCommission = await Promise.all(
     inserts.map(async (row) => {
       const fare = row.final_fare ?? row.calculated_fare ?? 0
@@ -209,8 +218,12 @@ export async function importTripsCsv(csvText: string): Promise<{
     })
   )
 
-  // 🌟 修改：將計算完成的 insertsWithCommission 寫入資料庫
-  const { error } = await supabase.from('trips').insert(insertsWithCommission)
+  // 🌟 重頭戲：改用 upsert，並指定依照 trip_code 來判斷是否重複！
+  const { error } = await supabase.from('trips').upsert(insertsWithCommission, {
+    onConflict: 'trip_code', // 當單號重複時，進行更新覆蓋
+    ignoreDuplicates: false  // 確保是「更新」而不是略過
+  })
+
   if (error) return { ok: false, inserted: 0, errors: [...errors, { line: 0, reason: `寫入失敗：${error.message}` }] }
 
   revalidatePath('/trips')
