@@ -18,11 +18,11 @@ export async function GET(req: NextRequest) {
   const fromIso = from ? new Date(`${from}T00:00:00+08:00`).toISOString() : null
   const toIso   = to   ? new Date(`${to}T23:59:59.999+08:00`).toISOString() : null
 
-  // 🌟 1. 查詢語句增加撈取 commission_rate 與 driver_final_fare
+  // 🌟 1. 查詢語句增加撈取 trip_code (單號)
   let q = supabase
     .from('trips')
     .select(`
-      id, departed_at, trip_count, destination_area, actual_stops,
+      id, trip_code, departed_at, trip_count, destination_area, actual_stops,
       final_fare, commission_rate, driver_final_fare, notes, is_kpi_achieved,
       vendors(name, warehouse),
       drivers(name),
@@ -41,9 +41,9 @@ export async function GET(req: NextRequest) {
     return new Response(`fetch failed: ${error.message}`, { status: 500 })
   }
 
-  // 🌟 2. CSV 表頭擴充「抽成比例(%)」與「司機實拿金額」
+  // 🌟 2. CSV 表頭擴充「單號」，建議放在第一欄最明顯
   const headers = [
-    '日期','廠商','倉庫','業務類別','地區','趟數','司機','車號',
+    '單號','日期','廠商','倉庫','業務類別','地區','趟數','司機','車號',
     '配送點數','配送區域備註','原始總運費','抽成比例(%)','司機實拿金額','KPI達標','加成費','備註',
   ]
 
@@ -52,18 +52,18 @@ export async function GET(req: NextRequest) {
       ? new Date(t.departed_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
       : ''
     return [
+      t.trip_code ?? '', // 🌟 3. 將單號填入對應欄位
       date,
       t.vendors?.name      ?? '',
       t.vendors?.warehouse ?? '',
       t.vendor_rate_rules?.service_type     ?? '',
       t.vendor_rate_rules?.destination_area ?? '',
       t.trip_count ?? 1,
-      t.drivers?.name           ?? '',
+      t.drivers?.name            ?? '',
       t.vehicles?.plate_number  ?? '',
       t.actual_stops     ?? '',
       t.destination_area ?? '',
       t.final_fare       ?? '',
-      // 🌟 3. 將資料填入對應欄位
       t.commission_rate  ?? '',
       t.driver_final_fare ?? '',
       t.is_kpi_achieved == null ? '' : t.is_kpi_achieved ? 'Y' : 'N',
