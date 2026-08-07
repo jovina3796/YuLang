@@ -287,12 +287,20 @@ export async function handleTripText(
     }
   }
 
+  // 🌟 準備用來裝「剛寫入的車趟 ID」的陣列
+  let insertedIds: string[] = []
+
   if (tripRows.length > 0) {
-    const { error: insErr } = await supabase.from('trips').insert(tripRows)
+    // 🌟 在結尾加上 .select('id') 讓資料庫回傳剛新增的 UUID
+    const { data, error: insErr } = await supabase.from('trips').insert(tripRows).select('id')
     if (insErr) {
       console.error('[line.tripText] insert failed', insErr)
       await reply(replyToken, [textMessage(`寫入失敗：${insErr.message}`)])
       return
+    }
+    // 🌟 把拿到的 ID 存起來
+    if (data) {
+      insertedIds = data.map(d => d.id)
     }
   }
 
@@ -302,6 +310,17 @@ export async function handleTripText(
   }
 
   const driverNote = actingDriverId !== driverId ? `代 ${actingDriverName} 回報` : ''
+
+  // 🌟 產生給 LINE 撤回按鈕用的 Payload (隱藏指令)
+  let deletePayload: string | undefined
+  if (insertedIds.length > 0) {
+    // LINE 規定 postback data 不能超過 300 字元。每個 UUID 是 36 字元。
+    // 一般司機報趟大多在 1~5 趟以內，非常安全。如果超過 7 趟，按鈕就不會顯示，避免壞掉。
+    const payload = `action=undo_trip&ids=${insertedIds.join(',')}`
+    if (payload.length <= 300) {
+      deletePayload = payload
+    }
+  }
 
   if (resolvedDays.length === 1) {
     const only = resolvedDays[0]
@@ -320,7 +339,8 @@ export async function handleTripText(
     }))
     const dateLabel = twDateToYmd(only.date) + (driverNote ? `（${driverNote}）` : '')
     await reply(replyToken, [
-      flexMessage('車趟已記錄', tripsSuccessBubble(dateLabel, lines)),
+      // 🌟 傳入 deletePayload 給泡泡卡片
+      flexMessage('車趟已記錄', tripsSuccessBubble(dateLabel, lines, deletePayload)), 
     ])
     return
   }
@@ -338,7 +358,8 @@ export async function handleTripText(
   })
   
   await reply(replyToken, [
-    flexMessage('車趟已記錄', tripsMultiDayBubble(driverNote, groups)),
+    // 🌟 傳入 deletePayload 給多天組合的泡泡卡片
+    flexMessage('車趟已記錄', tripsMultiDayBubble(driverNote, groups, deletePayload)), 
   ])
 }
 
