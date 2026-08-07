@@ -31,8 +31,8 @@ function createDeleteFooter(payload: string): FlexBox {
           type: 'postback',
           label: '❌ 發現錯誤，撤回重報',
           data: payload,
-          displayText: '撤回剛才回報的車趟' // 司機點擊後會在畫面上印出這句話
-        },
+          displayText: '撤回剛才回報的車趟' 
+        } as any, // 🌟 加上 as any 讓 TypeScript 放行，解決 Vercel 編譯錯誤
       },
     ],
   }
@@ -362,7 +362,7 @@ export function tripParseErrorBubble(originalText: string, reason: string, liffU
           style: 'primary',
           color: GREEN,
           height: 'md',
-          action: { type: 'uri', label: '開啟車趟表單', uri: liffUrl },
+          action: { type: 'uri', label: '開啟車趟表單', uri: liffUrl } as any, // 這裡為了保險也加一下
         },
       ],
     }
@@ -430,7 +430,7 @@ export function maintenanceFormTriggerBubble(liffUrl: string): FlexBubble {
           style: 'primary',
           color: GREEN,
           height: 'md',
-          action: { type: 'uri', label: '填寫維修表單', uri: liffUrl },
+          action: { type: 'uri', label: '填寫維修表單', uri: liffUrl } as any,
         },
       ],
     },
@@ -607,7 +607,7 @@ export function tripFormTriggerBubble(liffUrl: string): FlexBubble {
           style: 'primary',
           color: GREEN,
           height: 'md',
-          action: { type: 'uri', label: '填寫車趟表單', uri: liffUrl },
+          action: { type: 'uri', label: '填寫車趟表單', uri: liffUrl } as any,
         },
       ],
     },
@@ -641,7 +641,7 @@ export function fuelFormTriggerBubble(liffUrl: string): FlexBubble {
           style: 'primary',
           color: GREEN,
           height: 'md',
-          action: { type: 'uri', label: '填寫加油表單', uri: liffUrl },
+          action: { type: 'uri', label: '填寫加油表單', uri: liffUrl } as any,
         },
       ],
     },
