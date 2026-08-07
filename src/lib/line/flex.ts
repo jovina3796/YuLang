@@ -1,4 +1,4 @@
-import type { FlexBubble, FlexComponent } from '@/lib/line/api'
+import type { FlexBubble, FlexComponent, FlexBox } from '@/lib/line/api'
 
 const GREEN = '#2E7D32'
 const MUTED = '#888888'
@@ -11,6 +11,29 @@ function row(label: string, value: string): FlexComponent {
     contents: [
       { type: 'text', text: label, color: MUTED, size: 'sm', flex: 2 },
       { type: 'text', text: value, size: 'sm', flex: 5, wrap: true, color: '#222222' },
+    ],
+  }
+}
+
+// 🌟 共用元件：建立撤回按鈕的 Footer
+function createDeleteFooter(payload: string): FlexBox {
+  return {
+    type: 'box',
+    layout: 'vertical',
+    paddingAll: '12px',
+    contents: [
+      {
+        type: 'button',
+        style: 'secondary',
+        height: 'sm',
+        color: '#f0f0f0',
+        action: {
+          type: 'postback',
+          label: '❌ 發現錯誤，撤回重報',
+          data: payload,
+          displayText: '撤回剛才回報的車趟' // 司機點擊後會在畫面上印出這句話
+        },
+      },
     ],
   }
 }
@@ -64,6 +87,8 @@ export type TripSummary = {
   fare?:       number | null
   is_kpi?:     boolean | null
   is_special?: boolean | null
+  // 🌟 接收刪除用的隱藏指令參數
+  deletePayload?: string
 }
 
 export function tripSuccessBubble(s: TripSummary): FlexBubble {
@@ -76,11 +101,11 @@ export function tripSuccessBubble(s: TripSummary): FlexBubble {
   if (s.stops != null) rows.push(row('站數', String(s.stops)))
   if (s.fare != null)  rows.push(row('運費', `NT$ ${s.fare.toLocaleString()}`))
   const flags: string[] = []
-  if (s.is_kpi)     flags.push('達標')
+  if (s.is_kpi)      flags.push('達標')
   if (s.is_special) flags.push('加成')
   if (flags.length) rows.push(row('標記', flags.join(' / ')))
 
-  return {
+  const bubble: FlexBubble = {
     type: 'bubble',
     size: 'kilo',
     body: {
@@ -94,6 +119,13 @@ export function tripSuccessBubble(s: TripSummary): FlexBubble {
       ],
     },
   }
+
+  // 🌟 如果有傳入刪除指令，就加上 Footer
+  if (s.deletePayload) {
+    bubble.footer = createDeleteFooter(s.deletePayload)
+  }
+
+  return bubble
 }
 
 export type TripLine = {
@@ -104,7 +136,7 @@ export type TripLine = {
   fare:    number
 }
 
-export function tripsSuccessBubble(date: string, lines: TripLine[]): FlexBubble {
+export function tripsSuccessBubble(date: string, lines: TripLine[], deletePayload?: string): FlexBubble {
   const itemRows: FlexComponent[] = []
   let total = 0
   lines.forEach((t, i) => {
@@ -132,7 +164,7 @@ export function tripsSuccessBubble(date: string, lines: TripLine[]): FlexBubble 
     total += t.fare
   })
 
-  return {
+  const bubble: FlexBubble = {
     type: 'bubble',
     size: 'kilo',
     body: {
@@ -157,6 +189,13 @@ export function tripsSuccessBubble(date: string, lines: TripLine[]): FlexBubble 
       ],
     },
   }
+
+  // 🌟 如果有傳入刪除指令，就加上 Footer
+  if (deletePayload) {
+    bubble.footer = createDeleteFooter(deletePayload)
+  }
+
+  return bubble
 }
 
 export function restDayBubble(date: string, driverName: string): FlexBubble {
@@ -189,7 +228,7 @@ export type TripDayGroup =
   | { kind: 'trips'; date: string; lines: TripLine[] }
   | { kind: 'rest';  date: string }
 
-export function tripsMultiDayBubble(driverNote: string, groups: TripDayGroup[]): FlexBubble {
+export function tripsMultiDayBubble(driverNote: string, groups: TripDayGroup[], deletePayload?: string): FlexBubble {
   const blocks: FlexComponent[] = []
   let grandTotal = 0
   let tripCount = 0
@@ -276,11 +315,18 @@ export function tripsMultiDayBubble(driverNote: string, groups: TripDayGroup[]):
     })
   }
 
-  return {
+  const bubble: FlexBubble = {
     type: 'bubble',
     size: 'kilo',
     body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body },
   }
+
+  // 🌟 如果有傳入刪除指令，就加上 Footer
+  if (deletePayload) {
+    bubble.footer = createDeleteFooter(deletePayload)
+  }
+
+  return bubble
 }
 
 export function tripParseErrorBubble(originalText: string, reason: string, liffUrl: string | null): FlexBubble {
@@ -568,8 +614,6 @@ export function tripFormTriggerBubble(liffUrl: string): FlexBubble {
   }
 }
 
-// Bubble shown when the driver just types「加油」and a LIFF form is configured.
-// Renders a "填寫" button that opens the LIFF URL inside LINE.
 export function fuelFormTriggerBubble(liffUrl: string): FlexBubble {
   return {
     type: 'bubble',
