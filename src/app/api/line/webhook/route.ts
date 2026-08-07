@@ -166,6 +166,9 @@ async function handleEvent(event: LineEvent): Promise<void> {
 
     const driver = await findDriverByLineUserId(userId)
     const session = await loadSession(userId)
+    
+    // 🌟 就是這行！請務必確認有把它加進來，定義 isGroup 變數
+    const isGroup = source?.type === 'group' || source?.type === 'room'
 
     // 未綁定 → 處理邏輯
     if (!driver) {
