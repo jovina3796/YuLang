@@ -167,8 +167,18 @@ async function handleEvent(event: LineEvent): Promise<void> {
     const driver = await findDriverByLineUserId(userId)
     const session = await loadSession(userId)
 
-    // 未綁定 → 任何訊息都走綁定流程
+    // 未綁定 → 處理邏輯
     if (!driver) {
+      if (isGroup) {
+        // 🌟 【防呆機制】：在群組中，未綁定的人發言，機器人直接「已讀不回」裝死
+        // 除非他明確打出想綁定的指令，才引導他
+        if (text && text.trim() === '/綁定') {
+          await startBinding(userId, replyToken)
+        }
+        return 
+      }
+
+      // 如果是一對一私訊，就維持原本的強制引導綁定流程
       if (session.state !== 'binding') {
         await startBinding(userId, replyToken)
         return
