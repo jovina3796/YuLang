@@ -64,20 +64,26 @@ export function looksLikeTripText(text: string): boolean {
     stripped = stripped.slice(implicitMatch[1].length).trim()
   }
 
-  // 🌟 1. 【超強閒聊過濾器】：如果句子裡有這些代名詞或語氣詞，絕對是閒聊，直接忽略！
-  // (刻意不阻擋逗號或空白，因為司機報趟時常常用來分隔)
+  // 🌟 1. 【超強閒聊過濾器】：句子裡有這些代名詞或語氣詞，絕對是閒聊
   const chatFeatures = /[嗎呢啊呀吧囉喔哈我你他她去買吃]+/
   if (chatFeatures.test(stripped)) return false
 
-  // 2. 如果有明確的日期或 + 號開頭，視為車趟
+  // 🌟 2. 【非車趟特徵過濾】(新增)：排除帳密、信箱、網址等 IT 資訊
+  if (/(@|http|www|e-?mail|密碼|帳號|帳戶|用戶|登入|下載)/i.test(stripped)) return false
+  
+  // 🌟 3. 【防呆過濾】(新增)：連續出現 6 個以上的數字 (例如電話:0989220345、預設密碼:220345) 絕對不是正常車趟數字
+  if (/\d{6,}/.test(stripped)) return false
+
+  // 4. 如果有明確的日期或 + 號開頭，視為車趟
   if (DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)) return true
 
-  // 3. 如果包含數字 (店點/趟數) 或是休假，視為車趟
+  // 5. 如果包含數字 (店點/趟數) 或是休假，視為車趟
   if (/\d/.test(stripped)) return true
   if (/^(休|休假|請假)$/.test(stripped)) return true
 
-  // 4. 若包含空格且長度適中，可能是省略數字的純業務文字 (如「全聯 瑞芳」)
-  if (/\s/.test(stripped) && stripped.length > 3) return true
+  // 6. 若包含空格且長度適中，可能是省略數字的純業務文字 (如「全聯 瑞芳」)
+  // 加入長度限制，避免長篇大論的公告被誤判
+  if (/\s/.test(stripped) && stripped.length > 3 && stripped.length < 25) return true
 
   return false
 }
