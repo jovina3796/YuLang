@@ -8,8 +8,13 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   request.headers.set('x-pathname', pathname)
 
-  // 🌟 修改這裡：把 /api/cron/ 加入免驗證白名單中！
-  if (pathname.startsWith('/api/line/') || pathname.startsWith('/liff/') || pathname.startsWith('/api/cron/')) {
+  // 🌟 修改這裡：把 /api/export/ 也加入免驗證白名單中！
+  if (
+    pathname.startsWith('/api/line/') || 
+    pathname.startsWith('/liff/') || 
+    pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/api/export/') // 🌟 新增這一行，放行 Excel 下載 API
+  ) {
     return NextResponse.next({ request })
   }
 
