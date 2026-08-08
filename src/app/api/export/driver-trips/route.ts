@@ -73,9 +73,14 @@ export async function GET(req: NextRequest) {
   const naturalTotals: Record<string, number> = {}
 
   // 分類與計算
-  for (const trip of (rawTrips || [])) {
-    const vendorName = trip.vendors?.name || '未知廠商'
-    const startDay = trip.vendors?.billing_cycle_start_day ?? 1
+  for (const rawTrip of (rawTrips || [])) {
+    const trip = rawTrip as any // 🌟 繞過 Supabase 的型別推斷限制
+    
+    // 🌟 保險邏輯：無論 Supabase 回傳的是陣列還是單一物件，都安全取出
+    const v = Array.isArray(trip.vendors) ? trip.vendors[0] : trip.vendors
+    
+    const vendorName = v?.name || '未知廠商'
+    const startDay = v?.billing_cycle_start_day ?? 1
     
     if (!trip.departed_at) continue
     const tripDate = new Date(trip.departed_at)
@@ -136,7 +141,7 @@ export async function GET(req: NextRequest) {
     naturalSheet.addRow({ vendor, amount: total })
     grandNaturalTotal += total
   }
-  const ntRow = naturalSheet.addRow({ vendor: '當月總計', amount: grandNaturalTotal })
+  const ntRow = naturalSheet.addRow({ vendor: '當月產能總計', amount: grandNaturalTotal })
   ntRow.font = { bold: true, color: { argb: 'FF1976D2' } }
   naturalSheet.getColumn('amount').numFmt = '#,##0'
 
@@ -147,7 +152,7 @@ export async function GET(req: NextRequest) {
       { header: '日期', key: 'date', width: 15 },
       { header: '業務類別', key: 'service', width: 15 },
       { header: '趟數', key: 'trips', width: 10 },
-      { header: '店點數', key: 'stops', width: 10 },
+      { header: '站數', key: 'stops', width: 10 },
       { header: '運費', key: 'fare', width: 15 },
       { header: '備註', key: 'notes', width: 30 }
     ]
@@ -156,9 +161,12 @@ export async function GET(req: NextRequest) {
     detailSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7FA' } }
 
     for (const trip of trips) {
+      // 🌟 同樣為 vendor_rate_rules 加上防呆處理
+      const r = Array.isArray(trip.vendor_rate_rules) ? trip.vendor_rate_rules[0] : trip.vendor_rate_rules
+
       detailSheet.addRow({
         date: new Date(trip.departed_at).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }),
-        service: trip.vendor_rate_rules?.service_type || '',
+        service: r?.service_type || '',
         trips: trip.trip_count,
         stops: trip.actual_stops || '',
         fare: trip.final_fare || 0,
