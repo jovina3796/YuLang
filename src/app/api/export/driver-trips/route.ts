@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   const { data: rawTrips, error } = await supabase
     .from('trips')
     .select(`
-      id, departed_at, trip_count, actual_stops, final_fare, destination_area, notes, vendor_id,
+      id, departed_at, trip_count, actual_stops, final_fare, destination_area, notes, vendor_id, trip_code,
       vendors (name, billing_cycle_start_day),
       vendor_rate_rules (service_type)
     `)
@@ -75,9 +75,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const billingTripsByVendor: Record<string, any[]> = {}
+  const detailTripsByVendor: Record<string, any[]> = {}
   const billingAgg: Record<string, AggRow> = {}
-  const naturalAgg: Record<string, AggRow> = {}
 
   // 分類與計算
   for (const rawTrip of (rawTrips || [])) {
@@ -93,30 +92,32 @@ export async function GET(req: NextRequest) {
     const tripDate = new Date(trip.departed_at)
     const fare = Number(trip.final_fare || 0)
     
-    // 🌟 全面套用廠商與司機的最新設定，拋棄歷史錯誤快照
+    // 全面套用廠商與司機的最新設定
     const commRate = trip.vendor_id ? (vendorCommRates[trip.vendor_id] || 0) : 0
-    const net = fare * (1 - commRate / 100) // 直接用百分比計算
+    const net = fare * (1 - commRate / 100)
     
-    // 🌟 組合鍵值 (不再因為抽成比例不同而拆行，保證合併！)
     const aggKey = `${vendorName}|${serviceType}`
 
-    // 1. 計費週期
+    // 1. 判斷是否落在「計費週期」內
     const billing = getBillingCycle(targetYear, targetMonth, startDay)
-    if (tripDate >= billing.start && tripDate < billing.end) {
-      if (!billingTripsByVendor[vendorName]) billingTripsByVendor[vendorName] = []
-      billingTripsByVendor[vendorName].push(trip)
+    const inBilling = tripDate >= billing.start && tripDate < billing.end
 
+    // 2. 判斷是否落在「自然月」內
+    const natural = getNaturalMonth(targetYear, targetMonth)
+    const inNatural = tripDate >= natural.start && tripDate < natural.end
+
+    // 只要是在 計費週期 或 自然月 內，就加入明細表
+    if (inBilling || inNatural) {
+      if (!detailTripsByVendor[vendorName]) detailTripsByVendor[vendorName] = []
+      // 標記這筆車趟是否屬於計費週期，以供後續填滿色彩使用
+      detailTripsByVendor[vendorName].push({ ...trip, inBilling })
+    }
+
+    // 只有在 計費週期 內的，才加入首頁的請款總計
+    if (inBilling) {
       if (!billingAgg[aggKey]) billingAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
       billingAgg[aggKey].fare += fare
       billingAgg[aggKey].net += net
-    }
-
-    // 2. 自然月
-    const natural = getNaturalMonth(targetYear, targetMonth)
-    if (tripDate >= natural.start && tripDate < natural.end) {
-      if (!naturalAgg[aggKey]) naturalAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
-      naturalAgg[aggKey].fare += fare
-      naturalAgg[aggKey].net += net
     }
   }
 
@@ -125,9 +126,9 @@ export async function GET(req: NextRequest) {
   workbook.creator = 'YuLang ERP'
 
   // ==========================================
-  // Sheet 1: 計費週期總計
+  // Sheet 1: 計費結算總計 (發薪依據)
   // ==========================================
-  const billingSheet = workbook.addWorksheet('總計(計費週期)')
+  const billingSheet = workbook.addWorksheet('計費結算總計')
   billingSheet.columns = [
     { header: '廠商', key: 'vendor', width: 20 },
     { header: '業務', key: 'service', width: 15 },
@@ -144,52 +145,23 @@ export async function GET(req: NextRequest) {
       vendor: row.vendor,
       service: row.service,
       fare: row.fare,
-      commRate: `${row.commRate.toFixed(0)}%`, // 🌟 顯示為正確的 20%
+      commRate: `${row.commRate.toFixed(0)}%`, // 顯示為正確的 20%
       net: row.net
     })
     grandBillingNet += row.net
   }
   const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', fare: '', commRate: '', net: grandBillingNet })
-  btRow.font = { bold: true, color: { argb: 'FFD32F2F' } }
+  btRow.font = { bold: true, color: { argb: 'FFD32F2F' } } // 紅色總計
   billingSheet.getColumn('fare').numFmt = '#,##0'
   billingSheet.getColumn('net').numFmt = '#,##0'
 
-  // ==========================================
-  // Sheet 2: 自然月總計
-  // ==========================================
-  const naturalSheet = workbook.addWorksheet('總計(自然月)')
-  naturalSheet.columns = [
-    { header: '廠商', key: 'vendor', width: 20 },
-    { header: '業務', key: 'service', width: 15 },
-    { header: '運費金額', key: 'fare', width: 15 },
-    { header: '上游抽成比例', key: 'commRate', width: 15 },
-    { header: '實領金額', key: 'net', width: 15 }
-  ]
-  naturalSheet.getRow(1).font = { bold: true }
-  naturalSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } }
-
-  let grandNaturalNet = 0
-  for (const row of Object.values(naturalAgg)) {
-    naturalSheet.addRow({
-      vendor: row.vendor,
-      service: row.service,
-      fare: row.fare,
-      commRate: `${row.commRate.toFixed(0)}%`,
-      net: row.net
-    })
-    grandNaturalNet += row.net
-  }
-  const ntRow = naturalSheet.addRow({ vendor: '當月產能總計', service: '', fare: '', commRate: '', net: grandNaturalNet })
-  ntRow.font = { bold: true, color: { argb: 'FF1976D2' } }
-  naturalSheet.getColumn('fare').numFmt = '#,##0'
-  naturalSheet.getColumn('net').numFmt = '#,##0'
+  // (移除自然月總計分頁)
 
   // ==========================================
-  // 各廠商明細 Sheet (依計費週期)
+  // 各廠商明細 Sheet (依計費週期 + 自然月)
   // ==========================================
-  for (const [vendor, trips] of Object.entries(billingTripsByVendor)) {
+  for (const [vendor, trips] of Object.entries(detailTripsByVendor)) {
     const detailSheet = workbook.addWorksheet(vendor)
-    // 🌟 嚴格對齊你要求的順序：日期｜業務｜地區｜店點數｜趟數｜運費｜備註
     detailSheet.columns = [
       { header: '日期', key: 'date', width: 15 },
       { header: '業務類別', key: 'service', width: 15 },
@@ -203,12 +175,14 @@ export async function GET(req: NextRequest) {
     detailSheet.getRow(1).font = { bold: true }
     detailSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7FA' } }
 
-    let detailTotalFare = 0
+    let detailBillingFare = 0
+    let detailNaturalOnlyFare = 0
+
     for (const trip of trips) {
       const r = Array.isArray(trip.vendor_rate_rules) ? trip.vendor_rate_rules[0] : trip.vendor_rate_rules
       const fare = Number(trip.final_fare || 0)
       
-      detailSheet.addRow({
+      const row = detailSheet.addRow({
         date: new Date(trip.departed_at).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }),
         service: r?.service_type || '',
         area: trip.destination_area || '',
@@ -217,14 +191,36 @@ export async function GET(req: NextRequest) {
         fare: fare,
         notes: trip.notes || ''
       })
-      detailTotalFare += fare
+
+      // 🌟 分開計算總計，並將非本期的資料填滿淺黃色
+      if (trip.inBilling) {
+        detailBillingFare += fare
+      } else {
+        detailNaturalOnlyFare += fare
+        // 套用淺黃色背景 (Hex: FFFFF2CC) 以區分非計費週期的資料
+        row.eachCell(cell => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFF2CC' }
+          }
+        })
+      }
     }
     
-    // 🌟 在明細表最下方加入總計列
+    // 🌟 在明細表最下方加入雙重總計列
     const dTotalRow = detailSheet.addRow({
-      date: '總計', service: '', area: '', stops: '', trips: '', fare: detailTotalFare, notes: ''
+      date: '本期計費總計', service: '', area: '', stops: '', trips: '', fare: detailBillingFare, notes: ''
     })
-    dTotalRow.font = { bold: true, color: { argb: 'FF2E7D32' } } 
+    dTotalRow.font = { bold: true, color: { argb: 'FF2E7D32' } } // 綠色粗體
+
+    if (detailNaturalOnlyFare > 0) {
+      const nTotalRow = detailSheet.addRow({
+        date: '非本期(自然月)運費', service: '', area: '', stops: '', trips: '', fare: detailNaturalOnlyFare, notes: '黃底標示'
+      })
+      nTotalRow.font = { bold: true, color: { argb: 'FFED6C02' } } // 橘紅色粗體
+    }
+    
     detailSheet.getColumn('fare').numFmt = '#,##0'
   }
 
