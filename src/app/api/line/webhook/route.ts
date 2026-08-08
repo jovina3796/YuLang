@@ -112,7 +112,7 @@ async function registerGroupAndWelcome(groupId: string, defaultName: string, rep
     .eq('key', 'group_welcome_msg')
     .single();
 
-  const template = setting?.value || '大家好！我是車趟小幫手 🤖\n已成功綁定群組「{GroupName}」！\n系統每晚將會在此群組發送報趟提醒喔！🚗';
+  const template = setting?.value || '🤖\n已成功綁定群組「{GroupName}」！\n系統每天將會在此群組發送報趟提醒喔！🚗';
   const finalMessage = template.replace(/{GroupName}/g, groupName);
 
   await reply(replyToken, [textMessage(finalMessage)]);
@@ -256,6 +256,61 @@ async function handleEvent(event: LineEvent): Promise<void> {
     // 「報帳」開頭，彈出其他收支 LIFF 表單
     if (text && /^報帳(\s|$)/.test(text)) {
       await startMisc(userId, replyToken)
+      return
+    }
+
+    // 🌟 攔截「下載車趟紀錄」指令 (支援指定司機與月份)
+    const downloadMatch = text?.match(/^下載車趟紀錄\s+(\S+)\s+(\d{1,2})月?$/)
+    if (downloadMatch) {
+      const targetDriverName = downloadMatch[1]
+      const targetMonth = parseInt(downloadMatch[2], 10)
+      const currentYear = new Date().getFullYear()
+
+      const supabase = createServiceClient()
+      const { data: targetDriver } = await supabase
+        .from('drivers')
+        .select('id, name')
+        .eq('name', targetDriverName)
+        .single()
+
+      if (!targetDriver) {
+        await reply(replyToken, [textMessage(`❌ 找不到名為「${targetDriverName}」的司機。`)])
+        return
+      }
+
+      // 建立下載 API 的專屬連結 (附帶參數)
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yulang-erp.vercel.app'
+      const downloadUrl = `${baseUrl}/api/export/driver-trips?driverId=${targetDriver.id}&month=${targetMonth}&year=${currentYear}`
+
+      // 回傳下載卡片
+      await reply(replyToken, [
+        flexMessage('車趟紀錄下載', {
+          type: 'bubble',
+          size: 'kilo',
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '20px',
+            contents: [
+              { type: 'text', text: '📊 專屬車趟報表已就緒', weight: 'bold', size: 'lg', color: '#2E7D32' },
+              { type: 'text', text: `${targetDriver.name} - ${targetMonth}月份`, size: 'md', color: '#555555', margin: 'sm' },
+              { type: 'text', text: '※ 報表已自動套用各廠商的計費週期', size: 'xs', color: '#888888', margin: 'md', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'vertical',
+            contents: [
+              {
+                type: 'button',
+                style: 'primary',
+                color: '#2E7D32',
+                action: { type: 'uri', label: '點我下載 EXCEL', uri: downloadUrl } as any
+              }
+            ]
+          }
+        })
+      ])
       return
     }
 
