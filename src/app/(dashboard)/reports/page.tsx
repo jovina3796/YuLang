@@ -2,13 +2,13 @@ import { createServiceClient } from '@/lib/supabase/service'
 import Link from 'next/link'
 import { ArrowBigRightDash } from 'lucide-react'
 import { billingPeriodLabel } from '../vendor-info/_helpers'
+// 🌟 匯入強大的抽成計算引擎，取代舊的寫死邏輯
+import { calculateTripCommission } from '@/lib/finance/commission'
 
 type Vendor = { id: string; name: string; warehouse: string | null; billing_cycle_start_day: number; payment_delay_months: number }
 type Trip   = { final_fare: number | null; vendor_id: string; rate_rule_id: string | null; departed_at: string | null; trip_count: number | null; driver_id: string | null }
 type Driver = { id: string; name: string; default_vehicle_id: string | null }
 
-// Taipei (UTC+8) 午夜邊界：避免伺服器在 UTC 時，new Date(y,m,d) 產出 UTC 午夜
-// 而與資料庫中以 +08:00 寫入的 departed_at 比對失準（跨日問題）。
 function tpeMidnight(y: number, m: number, d: number) {
   return new Date(Date.UTC(y, m, d) - 8 * 3600 * 1000)
 }
@@ -66,11 +66,7 @@ export default async function ReportsPage({
   const windowStart = tpeMidnight(year, month - 9, 1).toISOString()
   const monthStart  = tpeMidnight(year, month, 1).toISOString()
   const monthEnd    = tpeMidnight(year, month + 1, 1).toISOString()
-  const monthStartD = monthStart.split('T')[0]
-  const monthEndD   = monthEnd.split('T')[0]
-  void monthStartD; void monthEndD
 
-  // 動態建立帶有司機篩選條件的查詢 (針對車趟與加油)
   let tripsQuery = supabase.from('trips')
     .select('final_fare, vendor_id, rate_rule_id, departed_at, trip_count, driver_id')
     .gte('departed_at', windowStart)
@@ -87,7 +83,6 @@ export default async function ReportsPage({
     fuelLogsQuery = fuelLogsQuery.eq('driver_id', driverId)
   }
 
-  // 執行所有查詢
   const [
     { data: allTrips },
     { data: fuelLogs },
@@ -112,7 +107,7 @@ export default async function ReportsPage({
       .select('id, name, warehouse, billing_cycle_start_day, payment_delay_months, display_order')
       .order('display_order', { ascending: true, nullsFirst: false }).order('name'),
     supabase.from('vendor_rate_rules')
-      .select('id, vendor_id, service_type, destination_area, upstream_commission'),
+      .select('id, vendor_id, service_type, destination_area'), // 🌟 移除無用的 upstream_commission
     supabase.from('fixed_expenses')
       .select('name, category, amount, active, start_month, end_month, vehicle_id')
       .eq('active', true),
@@ -124,14 +119,10 @@ export default async function ReportsPage({
       .select('id, assigned_driver_id')
   ])
 
-  // ===== 建立關聯車輛過濾邏輯 =====
   const allowedVehicleIds = new Set<string>()
   if (driverId && driverId !== 'all') {
-    // 1. 從司機預設車輛找
     const driverInfo = (allDrivers ?? []).find(d => d.id === driverId)
     if (driverInfo?.default_vehicle_id) allowedVehicleIds.add(driverInfo.default_vehicle_id)
-    
-    // 2. 從車輛指派紀錄找
     ;(allVehicles ?? []).forEach(v => {
       if (v.assigned_driver_id === driverId) allowedVehicleIds.add(v.id)
     })
@@ -142,13 +133,10 @@ export default async function ReportsPage({
   let validMiscTxs = (miscTxs ?? []) as any[]
 
   if (driverId && driverId !== 'all') {
-    // 扣除項目只列出該司機駕駛車輛的費用
     validMaintLogs = validMaintLogs.filter(m => m.vehicle_id && allowedVehicleIds.has(m.vehicle_id))
     validFixedExp = validFixedExp.filter(f => f.vehicle_id && allowedVehicleIds.has(f.vehicle_id))
-    // 雜項通常視為公司公費，若篩選個人帳則歸零
     validMiscTxs = [] 
   }
-  // ==================================
 
   const trips: Trip[] = (allTrips ?? []) as Trip[]
   const drivers: Driver[] = (allDrivers ?? []) as Driver[]
@@ -162,24 +150,38 @@ export default async function ReportsPage({
     }
   })
 
+  // 🌟 批次撈取司機的動態抽成快取
+  const commMap = new Map<string, number>()
+  const uniquePairs = new Set<string>()
+  trips.forEach(t => {
+    if (t.driver_id && t.vendor_id) uniquePairs.add(`${t.driver_id}|${t.vendor_id}`)
+  })
+  
+  await Promise.all(Array.from(uniquePairs).map(async pair => {
+    const [dId, vId] = pair.split('|')
+    try {
+      const info = await calculateTripCommission(dId, vId, 100)
+      commMap.set(pair, info.commission_rate || 0)
+    } catch (e) {
+      commMap.set(pair, 0)
+    }
+  }))
+
   const fuelCost = (fuelLogs ?? []).filter((f: any) => {
     const at = new Date(f.logged_at)
     return at >= tpeMidnight(year, month, 1) && at < tpeMidnight(year, month + 1, 1)
   }).reduce((s: number, f: any) => s + Number(f.total_cost ?? 0), 0)
 
-  // KPI 維修保養：依施作月份 (serviced_at) 加總當月金額
   const maintCostByService = validMaintLogs.filter((m: any) =>
     String(m.serviced_at).slice(0, 7) === ymStr
   ).reduce((s: number, m: any) => s + Number(m.cost ?? 0), 0)
 
-  // 扣項統計用：依 deduct_month 設定（無則 fallback 至施作月）
   const maintCost = validMaintLogs.filter((m: any) => {
     const effective = m.deduct_month ? String(m.deduct_month).slice(0, 7) : String(m.serviced_at).slice(0, 7)
     return effective === ymStr
   }).reduce((s: number, m: any) => s + Number(m.cost ?? 0), 0)
 
-  // Misc: use deduct_month if set, else transaction_date
-  const ymStrShort = ymStr // YYYY-MM
+  const ymStrShort = ymStr 
   const miscEffectiveThisMonth = validMiscTxs.filter((t: any) => {
     const effective = t.deduct_month ? String(t.deduct_month).slice(0, 7) : String(t.transaction_date).slice(0, 7)
     return effective === ymStrShort
@@ -187,7 +189,6 @@ export default async function ReportsPage({
   const miscIncome  = miscEffectiveThisMonth.filter((t: any) => t.type === 'income') .reduce((s: number, t: any) => s + Number(t.amount ?? 0), 0)
   const miscExpense = miscEffectiveThisMonth.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount ?? 0), 0)
 
-  // Fixed expenses active in target month
   const targetMonthDate = tpeMidnight(year, month, 15)
   const activeFixed = validFixedExp.filter((f: any) => {
     const start = f.start_month ? new Date(f.start_month) : null
@@ -202,13 +203,11 @@ export default async function ReportsPage({
     fixedByCategory.set(key, (fixedByCategory.get(key) ?? 0) + Number(f.amount ?? 0))
   })
 
-  // Rate-rule lookup
-  type RuleInfo = { vendor_id: string; service_type: string; destination_area: string | null; upstream_commission: number | null }
+  type RuleInfo = { vendor_id: string; service_type: string; destination_area: string | null }
   const ruleMap: Record<string, RuleInfo> = {}
   rateRules?.forEach(r => {
     ruleMap[r.id] = {
-      vendor_id: r.vendor_id, service_type: r.service_type,
-      destination_area: r.destination_area, upstream_commission: r.upstream_commission,
+      vendor_id: r.vendor_id, service_type: r.service_type, destination_area: r.destination_area
     }
   })
 
@@ -223,25 +222,23 @@ export default async function ReportsPage({
   }
   const periodTrips = trips.filter(isInThisPeriod)
 
-  // Viewing-month vendor share (for 廠商收入佔比 chart)
   const periodByVendor: Record<string, number> = {}
   periodTrips.forEach(t => {
     if (!t.vendor_id) return
     periodByVendor[t.vendor_id] = (periodByVendor[t.vendor_id] ?? 0) + (t.final_fare ?? 0)
   })
 
-  // 當月營收小計用 — periodTrips 的總和
+  // 🌟 當月營收小計用：動態取得抽成比例計算
   let periodGrandRev = 0, periodGrandCommissionAmt = 0
   periodTrips.forEach(t => {
     if (!t.rate_rule_id) return
-    const rule = ruleMap[t.rate_rule_id]
     const rev  = t.final_fare ?? 0
-    periodGrandRev           += rev
-    periodGrandCommissionAmt += rev * (rule?.upstream_commission ?? 0)
+    const commRate = commMap.get(`${t.driver_id}|${t.vendor_id}`) || 0
+    periodGrandRev             += rev
+    periodGrandCommissionAmt += rev * (commRate / 100)
   })
   const periodGrandNet = periodGrandRev - periodGrandCommissionAmt
 
-  // Incoming trips — 本月實際入帳的車趟（上個計費區間）
   const incomingTrips: Trip[] = []
   ;(vendors ?? []).forEach(v => {
     const delay = v.payment_delay_months ?? 2
@@ -254,14 +251,19 @@ export default async function ReportsPage({
     })
   })
 
-  // 進項統計 — 對應「本月實際入帳」的車趟
-  const breakdown: Record<string, Record<string, { rev: number; trips: number }>> = {}
+  // 🌟 進項統計：動態計算
+  const breakdown: Record<string, Record<string, { rev: number; trips: number; commissionAmount: number }>> = {}
   incomingTrips.forEach(t => {
     if (!t.vendor_id || !t.rate_rule_id) return
     if (!breakdown[t.vendor_id]) breakdown[t.vendor_id] = {}
-    if (!breakdown[t.vendor_id][t.rate_rule_id]) breakdown[t.vendor_id][t.rate_rule_id] = { rev: 0, trips: 0 }
-    breakdown[t.vendor_id][t.rate_rule_id].rev   += t.final_fare ?? 0
+    if (!breakdown[t.vendor_id][t.rate_rule_id]) breakdown[t.vendor_id][t.rate_rule_id] = { rev: 0, trips: 0, commissionAmount: 0 }
+    
+    const rev = t.final_fare ?? 0
+    const commRate = commMap.get(`${t.driver_id}|${t.vendor_id}`) || 0
+    
+    breakdown[t.vendor_id][t.rate_rule_id].rev   += rev
     breakdown[t.vendor_id][t.rate_rule_id].trips += t.trip_count ?? 1
+    breakdown[t.vendor_id][t.rate_rule_id].commissionAmount += rev * (commRate / 100)
   })
 
   type Row = {
@@ -285,15 +287,18 @@ export default async function ReportsPage({
       ? billingPeriodLabel(v.billing_cycle_start_day ?? 1, v.payment_delay_months ?? 2)
       : ''
     const ruleEntries = Object.entries(breakdown[vid])
-      .map(([rid, { rev, trips }]) => {
+      .map(([rid, b]) => {
         const rule = ruleMap[rid]
         const item = rule
           ? `${rule.service_type}${rule.destination_area ? ` (${rule.destination_area})` : ''}`
           : '未知規則'
-        const commission = rule?.upstream_commission ?? 0
-        const commissionAmount = rev * commission
+        const rev = b.rev
+        const commissionAmount = b.commissionAmount
         const net = rev - commissionAmount
-        return { rid, item, trips, rev, commission, commissionAmount, net }
+        // 計算綜合抽成率 (支援 "全部司機" 檢視時的加權平均顯示)
+        const effectiveCommission = rev > 0 ? (commissionAmount / rev) : 0
+        
+        return { rid, item, trips: b.trips, rev, commission: effectiveCommission, commissionAmount, net }
       })
       .sort((a, b) => b.rev - a.rev)
 
@@ -316,7 +321,6 @@ export default async function ReportsPage({
     })
   })
 
-  // Deduction breakdown for the right panel
   const deductionRows: { label: string; amount: number }[] = []
   for (const [cat, amt] of fixedByCategory) deductionRows.push({ label: cat, amount: amt })
   if (maintCost > 0)   deductionRows.push({ label: '維修保養', amount: maintCost })
@@ -384,7 +388,6 @@ export default async function ReportsPage({
   const payoutDate = tpeMidnight(year, month, 6)
   const weekdayLabel = ['日', '一', '二', '三', '四', '五', '六'][payoutDate.getDay()]
   const payoutStr = `${payoutDate.getFullYear()}/${String(payoutDate.getMonth() + 1).padStart(2, '0')}/${String(payoutDate.getDate()).padStart(2, '0')} 週${weekdayLabel}`
-  void primaryDelay
 
   return (
     <div>
@@ -397,7 +400,6 @@ export default async function ReportsPage({
             className="input" style={{ height: 30, padding: '4px 10px', fontSize: 12, width: 140 }}
           />
 
-          {/* 司機下拉選單 */}
           <select
             name="driverId"
             defaultValue={driverId || 'all'}
@@ -587,6 +589,7 @@ export default async function ReportsPage({
                   <td>{r.item}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{r.trips}</td>
                   <td className="mono" style={{ textAlign: 'right', color: 'var(--accent2)' }}>{r.revenue.toLocaleString()}</td>
+                  {/* 🌟 改為動態渲染百分比 */}
                   <td className="mono" style={{ textAlign: 'right', color: 'var(--text3)' }}>{(r.commission * 100).toFixed(0)}%</td>
                   <td className="mono" style={{ textAlign: 'right', color: 'var(--blue)' }}>{Math.round(r.netRevenue).toLocaleString()}</td>
                   {r.isFirstOfVendor ? (
