@@ -28,6 +28,9 @@ type AggRow = {
   net: number
 }
 
+// 🌟 定義全域預設字體：使用微軟正黑體，大小 11
+const DEFAULT_FONT = { name: '微軟正黑體', size: 11 }
+
 export async function GET(req: NextRequest) {
   const supabase = createServiceClient()
   const { searchParams } = new URL(req.url)
@@ -48,7 +51,6 @@ export async function GET(req: NextRequest) {
   const broadStart = tpeMidnight(targetYear, targetMonth - 1, 15).toISOString()
   const broadEnd = tpeMidnight(targetYear, targetMonth + 1, 5).toISOString()
 
-  // 🌟 確保撈取 vendor_id 以供動態計算抽成
   const { data: rawTrips, error } = await supabase
     .from('trips')
     .select(`
@@ -64,7 +66,6 @@ export async function GET(req: NextRequest) {
 
   if (error) return new Response(error.message, { status: 500 })
 
-  // 🌟 動態取得最新設定：建立廠商抽成快取，避免重複呼叫資料庫
   const vendorCommRates: Record<string, number> = {}
   for (const rawTrip of (rawTrips || [])) {
     const trip = rawTrip as any
@@ -92,7 +93,6 @@ export async function GET(req: NextRequest) {
     const tripDate = new Date(trip.departed_at)
     const fare = Number(trip.final_fare || 0)
     
-    // 全面套用廠商與司機的最新設定
     const commRate = trip.vendor_id ? (vendorCommRates[trip.vendor_id] || 0) : 0
     const net = fare * (1 - commRate / 100)
     
@@ -106,14 +106,13 @@ export async function GET(req: NextRequest) {
     const natural = getNaturalMonth(targetYear, targetMonth)
     const inNatural = tripDate >= natural.start && tripDate < natural.end
 
-    // 只要是在 計費週期 或 自然月 內，就加入明細表
+    // 加入明細表
     if (inBilling || inNatural) {
       if (!detailTripsByVendor[vendorName]) detailTripsByVendor[vendorName] = []
-      // 標記這筆車趟是否屬於計費週期，以供後續填滿色彩使用
       detailTripsByVendor[vendorName].push({ ...trip, inBilling })
     }
 
-    // 只有在 計費週期 內的，才加入首頁的請款總計
+    // 加入總計表
     if (inBilling) {
       if (!billingAgg[aggKey]) billingAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
       billingAgg[aggKey].fare += fare
@@ -136,7 +135,11 @@ export async function GET(req: NextRequest) {
     { header: '上游抽成比例', key: 'commRate', width: 15 },
     { header: '實領金額', key: 'net', width: 15 }
   ]
-  billingSheet.getRow(1).font = { bold: true }
+  
+  // 🌟 套用預設字體到所有欄位
+  billingSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
+
+  billingSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
   billingSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
 
   let grandBillingNet = 0
@@ -145,17 +148,16 @@ export async function GET(req: NextRequest) {
       vendor: row.vendor,
       service: row.service,
       fare: row.fare,
-      commRate: `${row.commRate.toFixed(0)}%`, // 顯示為正確的 20%
+      commRate: `${row.commRate.toFixed(0)}%`, 
       net: row.net
     })
     grandBillingNet += row.net
   }
   const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', fare: '', commRate: '', net: grandBillingNet })
-  btRow.font = { bold: true, color: { argb: 'FFD32F2F' } } // 紅色總計
+  btRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } } // 🌟 確保總計列也套用微軟正黑體
   billingSheet.getColumn('fare').numFmt = '#,##0'
   billingSheet.getColumn('net').numFmt = '#,##0'
 
-  // (移除自然月總計分頁)
 
   // ==========================================
   // 各廠商明細 Sheet (依計費週期 + 自然月)
@@ -172,7 +174,10 @@ export async function GET(req: NextRequest) {
       { header: '備註', key: 'notes', width: 30 }
     ]
 
-    detailSheet.getRow(1).font = { bold: true }
+    // 🌟 套用預設字體到所有明細欄位
+    detailSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
+
+    detailSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
     detailSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7FA' } }
 
     let detailBillingFare = 0
@@ -192,12 +197,10 @@ export async function GET(req: NextRequest) {
         notes: trip.notes || ''
       })
 
-      // 🌟 分開計算總計，並將非本期的資料填滿淺黃色
       if (trip.inBilling) {
         detailBillingFare += fare
       } else {
         detailNaturalOnlyFare += fare
-        // 套用淺黃色背景 (Hex: FFFFF2CC) 以區分非計費週期的資料
         row.eachCell(cell => {
           cell.fill = {
             type: 'pattern',
@@ -208,17 +211,16 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    // 🌟 在明細表最下方加入雙重總計列
     const dTotalRow = detailSheet.addRow({
       date: '本期計費總計', service: '', area: '', stops: '', trips: '', fare: detailBillingFare, notes: ''
     })
-    dTotalRow.font = { bold: true, color: { argb: 'FF2E7D32' } } // 綠色粗體
+    dTotalRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FF2E7D32' } } 
 
     if (detailNaturalOnlyFare > 0) {
       const nTotalRow = detailSheet.addRow({
         date: '非本期(自然月)運費', service: '', area: '', stops: '', trips: '', fare: detailNaturalOnlyFare, notes: '黃底標示'
       })
-      nTotalRow.font = { bold: true, color: { argb: 'FFED6C02' } } // 橘紅色粗體
+      nTotalRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFED6C02' } } 
     }
     
     detailSheet.getColumn('fare').numFmt = '#,##0'
