@@ -278,9 +278,9 @@ async function handleEvent(event: LineEvent): Promise<void> {
         return
       }
 
-      // 建立下載 API 的專屬連結 (附帶參數)
+      // 建立下載 API 的專屬連結 (附帶參數，並強制使用外部瀏覽器開啟)
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yulang-erp.vercel.app'
-      const downloadUrl = `${baseUrl}/api/export/driver-trips?driverId=${targetDriver.id}&month=${targetMonth}&year=${currentYear}`
+      const downloadUrl = `${baseUrl}/api/export/driver-trips?driverId=${targetDriver.id}&month=${targetMonth}&year=${currentYear}&openExternalBrowser=1`
 
       // 回傳下載卡片
       await reply(replyToken, [
