@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { calculateTripCommission } from '@/lib/finance/commission'
 import ExcelJS from 'exceljs'
 
 // 🌟 完美移植網頁版的時區處理，避免 UTC 跨日問題
@@ -7,30 +8,18 @@ function tpeMidnight(y: number, m: number, d: number) {
   return new Date(Date.UTC(y, m, d) - 8 * 3600 * 1000)
 }
 
-// 🌟 動態取得計費週期 (讀取資料庫的 start_day)
 function getBillingCycle(year: number, monthIndex: number, startDay: number) {
   const sd = startDay || 1
   if (sd === 1) {
-    return {
-      start: tpeMidnight(year, monthIndex, 1),
-      end: tpeMidnight(year, monthIndex + 1, 1)
-    }
+    return { start: tpeMidnight(year, monthIndex, 1), end: tpeMidnight(year, monthIndex + 1, 1) }
   }
-  return {
-    start: tpeMidnight(year, monthIndex - 1, sd),
-    end: tpeMidnight(year, monthIndex, sd)
-  }
+  return { start: tpeMidnight(year, monthIndex - 1, sd), end: tpeMidnight(year, monthIndex, sd) }
 }
 
-// 🌟 取得自然月起訖
 function getNaturalMonth(year: number, monthIndex: number) {
-  return {
-    start: tpeMidnight(year, monthIndex, 1),
-    end: tpeMidnight(year, monthIndex + 1, 1)
-  }
+  return { start: tpeMidnight(year, monthIndex, 1), end: tpeMidnight(year, monthIndex + 1, 1) }
 }
 
-// 🌟 定義總計表的資料結構
 type AggRow = {
   vendor: string
   service: string
@@ -50,22 +39,20 @@ export async function GET(req: NextRequest) {
     return new Response('Missing parameters', { status: 400 })
   }
 
-  // 轉換為 0-indexed 的月份 (7月 = 6)
   const targetMonth = parseInt(monthStr, 10) - 1
   const targetYear = parseInt(yearStr, 10)
 
   const { data: driver } = await supabase.from('drivers').select('name').eq('id', driverId).single()
   if (!driver) return new Response('Driver not found', { status: 404 })
 
-  // 放寬撈取區間，確保涵蓋跨月週期
   const broadStart = tpeMidnight(targetYear, targetMonth - 1, 15).toISOString()
   const broadEnd = tpeMidnight(targetYear, targetMonth + 1, 5).toISOString()
 
-  // 🌟 新增撈取 commission_rate, destination_area, driver_final_fare
+  // 🌟 確保撈取 vendor_id 以供動態計算抽成
   const { data: rawTrips, error } = await supabase
     .from('trips')
     .select(`
-      id, departed_at, trip_count, actual_stops, final_fare, destination_area, notes, commission_rate, driver_final_fare,
+      id, departed_at, trip_count, actual_stops, final_fare, destination_area, notes, vendor_id,
       vendors (name, billing_cycle_start_day),
       vendor_rate_rules (service_type)
     `)
@@ -77,9 +64,18 @@ export async function GET(req: NextRequest) {
 
   if (error) return new Response(error.message, { status: 500 })
 
+  // 🌟 動態取得最新設定：建立廠商抽成快取，避免重複呼叫資料庫
+  const vendorCommRates: Record<string, number> = {}
+  for (const rawTrip of (rawTrips || [])) {
+    const trip = rawTrip as any
+    const vendorId = trip.vendor_id
+    if (vendorId && vendorCommRates[vendorId] === undefined) {
+      const info = await calculateTripCommission(driverId, vendorId, 100)
+      vendorCommRates[vendorId] = info.commission_rate || 0
+    }
+  }
+
   const billingTripsByVendor: Record<string, any[]> = {}
-  
-  // 🌟 使用新的 AggRow 結構來儲存分組總計 (依照廠商+業務+抽成)
   const billingAgg: Record<string, AggRow> = {}
   const naturalAgg: Record<string, AggRow> = {}
 
@@ -95,16 +91,16 @@ export async function GET(req: NextRequest) {
     
     if (!trip.departed_at) continue
     const tripDate = new Date(trip.departed_at)
-    
     const fare = Number(trip.final_fare || 0)
-    const commRate = Number(trip.commission_rate || 0)
-    // 若沒有紀錄實領金額，用運費扣除抽成計算
-    const net = Number(trip.driver_final_fare || (fare * (1 - commRate)))
     
-    // 組合鍵值 (避免同一廠商有不同業務或不同抽成混在一起)
-    const aggKey = `${vendorName}|${serviceType}|${commRate}`
+    // 🌟 全面套用廠商與司機的最新設定，拋棄歷史錯誤快照
+    const commRate = trip.vendor_id ? (vendorCommRates[trip.vendor_id] || 0) : 0
+    const net = fare * (1 - commRate / 100) // 直接用百分比計算
+    
+    // 🌟 組合鍵值 (不再因為抽成比例不同而拆行，保證合併！)
+    const aggKey = `${vendorName}|${serviceType}`
 
-    // 1. 判斷是否落在「計費週期」內
+    // 1. 計費週期
     const billing = getBillingCycle(targetYear, targetMonth, startDay)
     if (tripDate >= billing.start && tripDate < billing.end) {
       if (!billingTripsByVendor[vendorName]) billingTripsByVendor[vendorName] = []
@@ -115,7 +111,7 @@ export async function GET(req: NextRequest) {
       billingAgg[aggKey].net += net
     }
 
-    // 2. 判斷是否落在「自然月」內
+    // 2. 自然月
     const natural = getNaturalMonth(targetYear, targetMonth)
     if (tripDate >= natural.start && tripDate < natural.end) {
       if (!naturalAgg[aggKey]) naturalAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
@@ -126,10 +122,10 @@ export async function GET(req: NextRequest) {
 
   // 繪製 Excel
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = ' YuLang ERP'
+  workbook.creator = 'YuLang ERP'
 
   // ==========================================
-  // Sheet 1: 計費週期總計 (發薪依據)
+  // Sheet 1: 計費週期總計
   // ==========================================
   const billingSheet = workbook.addWorksheet('總計(計費週期)')
   billingSheet.columns = [
@@ -148,7 +144,7 @@ export async function GET(req: NextRequest) {
       vendor: row.vendor,
       service: row.service,
       fare: row.fare,
-      commRate: `${(row.commRate * 100).toFixed(0)}%`, // 顯示為 20%
+      commRate: `${row.commRate.toFixed(0)}%`, // 🌟 顯示為正確的 20%
       net: row.net
     })
     grandBillingNet += row.net
@@ -159,7 +155,7 @@ export async function GET(req: NextRequest) {
   billingSheet.getColumn('net').numFmt = '#,##0'
 
   // ==========================================
-  // Sheet 2: 自然月總計 (產能依據)
+  // Sheet 2: 自然月總計
   // ==========================================
   const naturalSheet = workbook.addWorksheet('總計(自然月)')
   naturalSheet.columns = [
@@ -178,7 +174,7 @@ export async function GET(req: NextRequest) {
       vendor: row.vendor,
       service: row.service,
       fare: row.fare,
-      commRate: `${(row.commRate * 100).toFixed(0)}%`,
+      commRate: `${row.commRate.toFixed(0)}%`,
       net: row.net
     })
     grandNaturalNet += row.net
@@ -193,9 +189,10 @@ export async function GET(req: NextRequest) {
   // ==========================================
   for (const [vendor, trips] of Object.entries(billingTripsByVendor)) {
     const detailSheet = workbook.addWorksheet(vendor)
+    // 🌟 嚴格對齊你要求的順序：日期｜業務｜地區｜店點數｜趟數｜運費｜備註
     detailSheet.columns = [
       { header: '日期', key: 'date', width: 15 },
-      { header: '業務', key: 'service', width: 15 },
+      { header: '業務類別', key: 'service', width: 15 },
       { header: '地區', key: 'area', width: 15 },
       { header: '店點數', key: 'stops', width: 10 },
       { header: '趟數', key: 'trips', width: 10 },
@@ -227,8 +224,7 @@ export async function GET(req: NextRequest) {
     const dTotalRow = detailSheet.addRow({
       date: '總計', service: '', area: '', stops: '', trips: '', fare: detailTotalFare, notes: ''
     })
-    dTotalRow.font = { bold: true, color: { argb: 'FF2E7D32' } } // 綠色粗體
-    
+    dTotalRow.font = { bold: true, color: { argb: 'FF2E7D32' } } 
     detailSheet.getColumn('fare').numFmt = '#,##0'
   }
 
