@@ -79,7 +79,6 @@ export async function GET(req: NextRequest) {
   const detailTripsByVendor: Record<string, any[]> = {}
   const billingAgg: Record<string, AggRow> = {}
 
-  // 分類與計算
   for (const rawTrip of (rawTrips || [])) {
     const trip = rawTrip as any
     const v = Array.isArray(trip.vendors) ? trip.vendors[0] : trip.vendors
@@ -98,21 +97,19 @@ export async function GET(req: NextRequest) {
     
     const aggKey = `${vendorName}|${serviceType}`
 
-    // 1. 判斷是否落在「計費週期」內
     const billing = getBillingCycle(targetYear, targetMonth, startDay)
     const inBilling = tripDate >= billing.start && tripDate < billing.end
 
-    // 2. 判斷是否落在「自然月」內
     const natural = getNaturalMonth(targetYear, targetMonth)
     const inNatural = tripDate >= natural.start && tripDate < natural.end
 
-    // 加入明細表
+    // 加入明細表 (只要符合其一就列入)
     if (inBilling || inNatural) {
       if (!detailTripsByVendor[vendorName]) detailTripsByVendor[vendorName] = []
       detailTripsByVendor[vendorName].push({ ...trip, inBilling })
     }
 
-    // 加入總計表
+    // 加入計費總計表 (只有符合計費週期的才計入)
     if (inBilling) {
       if (!billingAgg[aggKey]) billingAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
       billingAgg[aggKey].fare += fare
@@ -136,31 +133,63 @@ export async function GET(req: NextRequest) {
     { header: '實領金額', key: 'net', width: 15 }
   ]
   
-  // 🌟 套用預設字體到所有欄位
+  // 套用預設字體
   billingSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
-
   billingSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
   billingSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
 
+  // 🌟 將資料依廠商分組，為合併儲存格做準備
+  const groupedBilling = Object.values(billingAgg).reduce((acc, row) => {
+    if (!acc[row.vendor]) acc[row.vendor] = []
+    acc[row.vendor].push(row)
+    return acc
+  }, {} as Record<string, AggRow[]>)
+
   let grandBillingNet = 0
-  for (const row of Object.values(billingAgg)) {
-    billingSheet.addRow({
-      vendor: row.vendor,
-      service: row.service,
-      fare: row.fare,
-      commRate: `${row.commRate.toFixed(0)}%`, 
-      net: row.net
+
+  // 🌟 逐一印出各廠商資料，並動態合併儲存格
+  for (const [vendor, rows] of Object.entries(groupedBilling)) {
+    // 記錄這個廠商寫入的起始行號
+    const startRow = billingSheet.rowCount + 1
+
+    // 依序寫入業務明細
+    rows.forEach(row => {
+      billingSheet.addRow({
+        vendor: row.vendor,
+        service: row.service,
+        fare: row.fare,
+        commRate: `${row.commRate.toFixed(0)}%`, 
+        net: row.net
+      })
+      grandBillingNet += row.net
     })
-    grandBillingNet += row.net
+
+    // 記錄結束行號
+    const endRow = billingSheet.rowCount
+
+    // 如果該廠商有 2 筆以上的業務，執行儲存格合併
+    if (endRow > startRow) {
+      // 合併 A 欄 (廠商)
+      billingSheet.mergeCells(`A${startRow}:A${endRow}`)
+      // 合併 D 欄 (上游抽成比例)
+      billingSheet.mergeCells(`D${startRow}:D${endRow}`)
+    }
+
+    // 將合併後的儲存格設定為垂直與水平置中
+    const vendorCell = billingSheet.getCell(`A${startRow}`)
+    const commRateCell = billingSheet.getCell(`D${startRow}`)
+    vendorCell.alignment = { vertical: 'middle', horizontal: 'center' }
+    commRateCell.alignment = { vertical: 'middle', horizontal: 'center' }
   }
+
+  // 寫入最底部的總計
   const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', fare: '', commRate: '', net: grandBillingNet })
-  btRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } } // 🌟 確保總計列也套用微軟正黑體
+  btRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } } 
   billingSheet.getColumn('fare').numFmt = '#,##0'
   billingSheet.getColumn('net').numFmt = '#,##0'
 
-
   // ==========================================
-  // 各廠商明細 Sheet (依計費週期 + 自然月)
+  // 各廠商明細 Sheet (已移除自然月分頁)
   // ==========================================
   for (const [vendor, trips] of Object.entries(detailTripsByVendor)) {
     const detailSheet = workbook.addWorksheet(vendor)
@@ -174,9 +203,7 @@ export async function GET(req: NextRequest) {
       { header: '備註', key: 'notes', width: 30 }
     ]
 
-    // 🌟 套用預設字體到所有明細欄位
     detailSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
-
     detailSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
     detailSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7FA' } }
 
@@ -201,6 +228,7 @@ export async function GET(req: NextRequest) {
         detailBillingFare += fare
       } else {
         detailNaturalOnlyFare += fare
+        // 非本期車趟填滿淺黃色背景
         row.eachCell(cell => {
           cell.fill = {
             type: 'pattern',
