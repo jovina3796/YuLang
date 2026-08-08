@@ -103,13 +103,11 @@ export async function GET(req: NextRequest) {
     const natural = getNaturalMonth(targetYear, targetMonth)
     const inNatural = tripDate >= natural.start && tripDate < natural.end
 
-    // 加入明細表 (只要符合其一就列入)
     if (inBilling || inNatural) {
       if (!detailTripsByVendor[vendorName]) detailTripsByVendor[vendorName] = []
       detailTripsByVendor[vendorName].push({ ...trip, inBilling })
     }
 
-    // 加入計費總計表 (只有符合計費週期的才計入)
     if (inBilling) {
       if (!billingAgg[aggKey]) billingAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
       billingAgg[aggKey].fare += fare
@@ -117,7 +115,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 繪製 Excel
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'YuLang ERP'
 
@@ -125,20 +122,20 @@ export async function GET(req: NextRequest) {
   // Sheet 1: 計費結算總計 (發薪依據)
   // ==========================================
   const billingSheet = workbook.addWorksheet('計費結算總計')
+  
+  // 🌟 更新欄位順序對齊圖片需求
   billingSheet.columns = [
-    { header: '廠商', key: 'vendor', width: 20 },
+    { header: '廠商', key: 'vendor', width: 15 },
     { header: '業務', key: 'service', width: 15 },
-    { header: '運費金額', key: 'fare', width: 15 },
     { header: '上游抽成比例', key: 'commRate', width: 15 },
+    { header: '運費金額', key: 'fare', width: 15 },
     { header: '實領金額', key: 'net', width: 15 }
   ]
   
-  // 套用預設字體
   billingSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
   billingSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
   billingSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
 
-  // 🌟 將資料依廠商分組，為合併儲存格做準備
   const groupedBilling = Object.values(billingAgg).reduce((acc, row) => {
     if (!acc[row.vendor]) acc[row.vendor] = []
     acc[row.vendor].push(row)
@@ -147,49 +144,74 @@ export async function GET(req: NextRequest) {
 
   let grandBillingNet = 0
 
-  // 🌟 逐一印出各廠商資料，並動態合併儲存格
+  // 🌟 動態輸出資料並合併儲存格
   for (const [vendor, rows] of Object.entries(groupedBilling)) {
-    // 記錄這個廠商寫入的起始行號
     const startRow = billingSheet.rowCount + 1
+    let vendorTotalFare = 0
+    let vendorTotalNet = 0
 
-    // 依序寫入業務明細
     rows.forEach(row => {
       billingSheet.addRow({
         vendor: row.vendor,
         service: row.service,
+        commRate: `${row.commRate.toFixed(0)}%`,
         fare: row.fare,
-        commRate: `${row.commRate.toFixed(0)}%`, 
-        net: row.net
+        net: '' // 🌟 明細列的實領金額保持空白
       })
-      grandBillingNet += row.net
+      vendorTotalFare += row.fare
+      vendorTotalNet += row.net
     })
 
-    // 記錄結束行號
     const endRow = billingSheet.rowCount
 
-    // 如果該廠商有 2 筆以上的業務，執行儲存格合併
+    // 🌟 合併 A 欄(廠商) 與 C 欄(抽成比例)
     if (endRow > startRow) {
-      // 合併 A 欄 (廠商)
       billingSheet.mergeCells(`A${startRow}:A${endRow}`)
-      // 合併 D 欄 (上游抽成比例)
-      billingSheet.mergeCells(`D${startRow}:D${endRow}`)
+      billingSheet.mergeCells(`C${startRow}:C${endRow}`)
     }
+    
+    // 垂直與水平置中
+    billingSheet.getCell(`A${startRow}`).alignment = { vertical: 'middle', horizontal: 'center' }
+    billingSheet.getCell(`C${startRow}`).alignment = { vertical: 'middle', horizontal: 'center' }
 
-    // 將合併後的儲存格設定為垂直與水平置中
-    const vendorCell = billingSheet.getCell(`A${startRow}`)
-    const commRateCell = billingSheet.getCell(`D${startRow}`)
-    vendorCell.alignment = { vertical: 'middle', horizontal: 'center' }
-    commRateCell.alignment = { vertical: 'middle', horizontal: 'center' }
+    // 🌟 加入小計列
+    const subTotalRow = billingSheet.addRow({
+      vendor: '小計', // 將會合併 A~C
+      service: '',
+      commRate: '',
+      fare: vendorTotalFare,
+      net: vendorTotalNet
+    })
+    
+    const subRowNum = billingSheet.rowCount
+    billingSheet.mergeCells(`A${subRowNum}:C${subRowNum}`)
+    billingSheet.getCell(`A${subRowNum}`).alignment = { horizontal: 'center', vertical: 'middle' }
+
+    // 🌟 小計列專屬樣式 (橘色文字、淺橘底色、下底線)
+    subTotalRow.eachCell(cell => {
+      cell.font = { ...DEFAULT_FONT, color: { argb: 'FFD84315' } } // 橘紅色文字
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBE6' } } // 淺橘色背景
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF000000' } } } // 黑色下底線
+    })
+
+    grandBillingNet += vendorTotalNet
   }
 
-  // 寫入最底部的總計
-  const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', fare: '', commRate: '', net: grandBillingNet })
-  btRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } } 
+  // 🌟 最下方的總計列
+  const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', commRate: '', fare: '', net: grandBillingNet })
+  const btRowNum = billingSheet.rowCount
+  billingSheet.mergeCells(`A${btRowNum}:D${btRowNum}`) // 合併 A~D
+  billingSheet.getCell(`A${btRowNum}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  
+  btRow.eachCell(cell => {
+    cell.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } } // 紅色粗體
+  })
+
   billingSheet.getColumn('fare').numFmt = '#,##0'
   billingSheet.getColumn('net').numFmt = '#,##0'
 
   // ==========================================
-  // 各廠商明細 Sheet (已移除自然月分頁)
+  // 各廠商明細 Sheet
   // ==========================================
   for (const [vendor, trips] of Object.entries(detailTripsByVendor)) {
     const detailSheet = workbook.addWorksheet(vendor)
@@ -228,7 +250,6 @@ export async function GET(req: NextRequest) {
         detailBillingFare += fare
       } else {
         detailNaturalOnlyFare += fare
-        // 非本期車趟填滿淺黃色背景
         row.eachCell(cell => {
           cell.fill = {
             type: 'pattern',
