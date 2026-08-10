@@ -20,15 +20,6 @@ function getNaturalMonth(year: number, monthIndex: number) {
   return { start: tpeMidnight(year, monthIndex, 1), end: tpeMidnight(year, monthIndex + 1, 1) }
 }
 
-type AggRow = {
-  vendor: string
-  service: string
-  fare: number
-  commRate: number
-  net: number
-}
-
-// 🌟 定義全域預設字體：使用微軟正黑體，大小 11
 const DEFAULT_FONT = { name: '微軟正黑體', size: 11 }
 
 export async function GET(req: NextRequest) {
@@ -76,8 +67,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const detailTripsByVendor: Record<string, any[]> = {}
-  const billingAgg: Record<string, AggRow> = {}
+  // 資料暫存結構
+  const billingAgg: Record<string, { commRate: number, services: Record<string, number> }> = {}
+  
+  type TripData = {
+    dateObj: Date
+    dateStr: string
+    serviceType: string
+    area: string | null
+    stops: number | null
+    tripCount: number
+    fare: number
+    notes: string | null
+    inBilling: boolean
+  }
+  const detailTripsByVendor: Record<string, TripData[]> = {}
 
   for (const rawTrip of (rawTrips || [])) {
     const trip = rawTrip as any
@@ -90,13 +94,12 @@ export async function GET(req: NextRequest) {
     
     if (!trip.departed_at) continue
     const tripDate = new Date(trip.departed_at)
+    // 取得當地 YYYY-MM-DD 作為概覽的分組鍵
+    const dateStr = tripDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
     const fare = Number(trip.final_fare || 0)
     
     const commRate = trip.vendor_id ? (vendorCommRates[trip.vendor_id] || 0) : 0
-    const net = fare * (1 - commRate / 100)
     
-    const aggKey = `${vendorName}|${serviceType}`
-
     const billing = getBillingCycle(targetYear, targetMonth, startDay)
     const inBilling = tripDate >= billing.start && tripDate < billing.end
 
@@ -105,25 +108,39 @@ export async function GET(req: NextRequest) {
 
     if (inBilling || inNatural) {
       if (!detailTripsByVendor[vendorName]) detailTripsByVendor[vendorName] = []
-      detailTripsByVendor[vendorName].push({ ...trip, inBilling })
+      detailTripsByVendor[vendorName].push({
+        dateObj: tripDate,
+        dateStr: dateStr,
+        serviceType: serviceType,
+        area: trip.destination_area || null,
+        stops: trip.actual_stops || null,
+        tripCount: trip.trip_count || 1,
+        fare: fare,
+        notes: trip.notes || null,
+        inBilling: inBilling
+      })
     }
 
     if (inBilling) {
-      if (!billingAgg[aggKey]) billingAgg[aggKey] = { vendor: vendorName, service: serviceType, fare: 0, commRate, net: 0 }
-      billingAgg[aggKey].fare += fare
-      billingAgg[aggKey].net += net
+      if (!billingAgg[vendorName]) {
+        billingAgg[vendorName] = { commRate: commRate / 100, services: {} }
+      }
+      if (!billingAgg[vendorName].services[serviceType]) {
+        billingAgg[vendorName].services[serviceType] = 0
+      }
+      billingAgg[vendorName].services[serviceType] += fare
     }
   }
 
+  // 繪製 Excel
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'YuLang ERP'
 
   // ==========================================
-  // Sheet 1: 計費結算總計 (發薪依據)
+  // Sheet 1: 計費結算總計
   // ==========================================
   const billingSheet = workbook.addWorksheet('計費結算總計')
   
-  // 🌟 更新欄位順序對齊圖片需求
   billingSheet.columns = [
     { header: '廠商', key: 'vendor', width: 15 },
     { header: '業務', key: 'service', width: 15 },
@@ -135,143 +152,226 @@ export async function GET(req: NextRequest) {
   billingSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
   billingSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
   billingSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
-
-  const groupedBilling = Object.values(billingAgg).reduce((acc, row) => {
-    if (!acc[row.vendor]) acc[row.vendor] = []
-    acc[row.vendor].push(row)
-    return acc
-  }, {} as Record<string, AggRow[]>)
+  billingSheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
 
   let grandBillingNet = 0
+  let currentRow = 2
 
-  // 🌟 動態輸出資料並合併儲存格
-  for (const [vendor, rows] of Object.entries(groupedBilling)) {
-    const startRow = billingSheet.rowCount + 1
+  for (const [vendor, data] of Object.entries(billingAgg)) {
+    const startRow = currentRow
+    // 將業務按照金額排序
+    const services = Object.entries(data.services).sort((a, b) => b[1] - a[1]) 
+    
     let vendorTotalFare = 0
     let vendorTotalNet = 0
 
-    rows.forEach(row => {
+    // 印出明細行
+    services.forEach(([service, fare]) => {
       billingSheet.addRow({
-        vendor: row.vendor,
-        service: row.service,
-        commRate: `${row.commRate.toFixed(0)}%`,
-        fare: row.fare,
-        net: '' // 🌟 明細列的實領金額保持空白
+        vendor: vendor,
+        service: service,
+        commRate: `${(data.commRate * 100).toFixed(0)}%`,
+        fare: fare,
+        net: '' // 🌟 實領金額留白
       })
-      vendorTotalFare += row.fare
-      vendorTotalNet += row.net
+      vendorTotalFare += fare
+      currentRow++
     })
 
-    const endRow = billingSheet.rowCount
+    const endRow = currentRow - 1
 
-    // 🌟 合併 A 欄(廠商) 與 C 欄(抽成比例)
+    // 🌟 合併儲存格
     if (endRow > startRow) {
       billingSheet.mergeCells(`A${startRow}:A${endRow}`)
       billingSheet.mergeCells(`C${startRow}:C${endRow}`)
     }
     
-    // 垂直與水平置中
     billingSheet.getCell(`A${startRow}`).alignment = { vertical: 'middle', horizontal: 'center' }
     billingSheet.getCell(`C${startRow}`).alignment = { vertical: 'middle', horizontal: 'center' }
 
-    // 🌟 加入小計列
+    // 🌟 小計列
+    vendorTotalNet = vendorTotalFare * (1 - data.commRate)
     const subTotalRow = billingSheet.addRow({
-      vendor: '小計', // 將會合併 A~C
+      vendor: '小計',
       service: '',
       commRate: '',
       fare: vendorTotalFare,
       net: vendorTotalNet
     })
     
-    const subRowNum = billingSheet.rowCount
-    billingSheet.mergeCells(`A${subRowNum}:C${subRowNum}`)
-    billingSheet.getCell(`A${subRowNum}`).alignment = { horizontal: 'center', vertical: 'middle' }
+    billingSheet.mergeCells(`A${currentRow}:C${currentRow}`)
+    billingSheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center', vertical: 'middle' }
 
-    // 🌟 小計列專屬樣式 (橘色文字、淺橘底色、下底線)
+    // 🌟 小計列樣式：橘色文字、淺橘底色、下底線
     subTotalRow.eachCell(cell => {
-      cell.font = { ...DEFAULT_FONT, color: { argb: 'FFD84315' } } // 橘紅色文字
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBE6' } } // 淺橘色背景
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FF000000' } } } // 黑色下底線
+      cell.font = { ...DEFAULT_FONT, color: { argb: 'FFD84315' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBE6' } }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF000000' } } }
     })
 
     grandBillingNet += vendorTotalNet
+    currentRow++
   }
 
-  // 🌟 最下方的總計列
+  // 🌟 總計列
   const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', commRate: '', fare: '', net: grandBillingNet })
-  const btRowNum = billingSheet.rowCount
-  billingSheet.mergeCells(`A${btRowNum}:D${btRowNum}`) // 合併 A~D
-  billingSheet.getCell(`A${btRowNum}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  billingSheet.mergeCells(`A${currentRow}:D${currentRow}`)
+  billingSheet.getCell(`A${currentRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
   
   btRow.eachCell(cell => {
-    cell.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } } // 紅色粗體
+    cell.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFD32F2F' } }
   })
 
   billingSheet.getColumn('fare').numFmt = '#,##0'
   billingSheet.getColumn('net').numFmt = '#,##0'
 
   // ==========================================
-  // 各廠商明細 Sheet
+  // 廠商專屬概覽與明細分頁
   // ==========================================
-  for (const [vendor, trips] of Object.entries(detailTripsByVendor)) {
-    const detailSheet = workbook.addWorksheet(vendor)
-    detailSheet.columns = [
+  const sortedVendors = Object.keys(detailTripsByVendor).sort()
+
+  for (const vendor of sortedVendors) {
+    const trips = detailTripsByVendor[vendor]
+    
+    // --- 廠商概覽分頁 ---
+    const overviewSheet = workbook.addWorksheet(`${vendor}概覽`)
+    const services = Array.from(new Set(trips.map(t => t.serviceType))).sort()
+    const isSingleService = services.length === 1
+    
+    const overviewCols = [{ header: '日期', key: 'date', width: 15 }]
+    if (isSingleService) {
+      overviewCols.push({ header: '金額', key: 'fare', width: 15 })
+    } else {
+      services.forEach(s => overviewCols.push({ header: s, key: s, width: 15 }))
+      overviewCols.push({ header: '總計', key: 'total', width: 15 })
+    }
+    overviewSheet.columns = overviewCols
+    overviewSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
+    overviewSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
+    overviewSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
+    overviewSheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
+
+    // 將資料依日期樞紐
+    const dateMap: Record<string, { dateObj: Date, inBilling: boolean, fares: Record<string, number> }> = {}
+    trips.forEach(t => {
+      const dStr = t.dateStr
+      if (!dateMap[dStr]) dateMap[dStr] = { dateObj: t.dateObj, inBilling: t.inBilling, fares: {} }
+      if (!dateMap[dStr].fares[t.serviceType]) dateMap[dStr].fares[t.serviceType] = 0
+      dateMap[dStr].fares[t.serviceType] += t.fare
+    })
+    
+    const sortedDates = Object.keys(dateMap).sort()
+    
+    sortedDates.forEach(dStr => {
+      const dInfo = dateMap[dStr]
+      const rowData: any = { date: dInfo.dateObj }
+      
+      let dayTotal = 0
+      if (isSingleService) {
+        const fare = dInfo.fares[services[0]] || 0
+        rowData.fare = fare
+      } else {
+        services.forEach(s => {
+          const fare = dInfo.fares[s] || 0
+          rowData[s] = fare > 0 ? fare : null
+          dayTotal += fare
+        })
+        rowData.total = dayTotal
+      }
+      
+      const row = overviewSheet.addRow(rowData)
+      if (!dInfo.inBilling) { // 非本期自動填滿淺黃色
+        row.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }
+        })
+      }
+    })
+    
+    // 概覽總計列
+    if (isSingleService) {
+      const totalFare = trips.reduce((sum, t) => sum + t.fare, 0)
+      const totRow = overviewSheet.addRow({ date: '合計', fare: totalFare })
+      totRow.font = { ...DEFAULT_FONT, bold: true }
+      overviewSheet.getCell(`A${overviewSheet.rowCount}`).alignment = { horizontal: 'right' }
+    } else {
+      const totData: any = { date: '總計' }
+      let grandTot = 0
+      services.forEach(s => {
+        const sTot = trips.filter(t => t.serviceType === s).reduce((sum, t) => sum + t.fare, 0)
+        totData[s] = sTot
+        grandTot += sTot
+      })
+      totData.total = grandTot
+      const totRow = overviewSheet.addRow(totData)
+      totRow.font = { ...DEFAULT_FONT, bold: true }
+      overviewSheet.getCell(`A${overviewSheet.rowCount}`).alignment = { horizontal: 'center' }
+    }
+    
+    overviewSheet.getColumn('date').numFmt = 'yyyy/m/d'
+    if (isSingleService) {
+      overviewSheet.getColumn('fare').numFmt = '#,##0'
+    } else {
+      services.forEach(s => overviewSheet.getColumn(s).numFmt = '#,##0')
+      overviewSheet.getColumn('total').numFmt = '#,##0'
+    }
+
+    // --- 廠商明細分頁 ---
+    const detailSheet = workbook.addWorksheet(`${vendor}明細`)
+    
+    // 動態判斷是否需要 地區、店點數 欄位
+    const hasArea = trips.some(t => t.area)
+    const hasStops = trips.some(t => t.stops)
+    
+    const detailCols = [
       { header: '日期', key: 'date', width: 15 },
-      { header: '業務類別', key: 'service', width: 15 },
-      { header: '地區', key: 'area', width: 15 },
-      { header: '店點數', key: 'stops', width: 10 },
+      { header: '業務類別', key: 'service', width: 15 }
+    ]
+    if (hasArea) detailCols.push({ header: '地區', key: 'area', width: 15 })
+    if (hasStops) detailCols.push({ header: '店點數', key: 'stops', width: 10 })
+    
+    detailCols.push(
       { header: '趟數', key: 'trips', width: 10 },
       { header: '運費', key: 'fare', width: 15 },
       { header: '備註', key: 'notes', width: 30 }
-    ]
-
+    )
+    
+    detailSheet.columns = detailCols
     detailSheet.columns.forEach(col => { if (col) col.font = DEFAULT_FONT })
     detailSheet.getRow(1).font = { ...DEFAULT_FONT, bold: true }
     detailSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7FA' } }
+    detailSheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
 
-    let detailBillingFare = 0
-    let detailNaturalOnlyFare = 0
+    let detailTotalFare = 0
+
+    // 依日期排序
+    trips.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
 
     for (const trip of trips) {
-      const r = Array.isArray(trip.vendor_rate_rules) ? trip.vendor_rate_rules[0] : trip.vendor_rate_rules
-      const fare = Number(trip.final_fare || 0)
-      
-      const row = detailSheet.addRow({
-        date: new Date(trip.departed_at).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }),
-        service: r?.service_type || '',
-        area: trip.destination_area || '',
-        stops: trip.actual_stops || '',
-        trips: trip.trip_count || 1,
-        fare: fare,
+      const rowData: any = {
+        date: trip.dateObj,
+        service: trip.serviceType,
+        trips: trip.tripCount,
+        fare: trip.fare,
         notes: trip.notes || ''
-      })
+      }
+      if (hasArea) rowData.area = trip.area || ''
+      if (hasStops) rowData.stops = trip.stops || ''
 
-      if (trip.inBilling) {
-        detailBillingFare += fare
-      } else {
-        detailNaturalOnlyFare += fare
+      const row = detailSheet.addRow(rowData)
+
+      if (!trip.inBilling) {
         row.eachCell(cell => {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFFF2CC' }
-          }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }
         })
       }
+      detailTotalFare += trip.fare
     }
     
-    const dTotalRow = detailSheet.addRow({
-      date: '本期計費總計', service: '', area: '', stops: '', trips: '', fare: detailBillingFare, notes: ''
-    })
+    const dTotalRow = detailSheet.addRow({ date: '總計', fare: detailTotalFare })
     dTotalRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FF2E7D32' } } 
-
-    if (detailNaturalOnlyFare > 0) {
-      const nTotalRow = detailSheet.addRow({
-        date: '非本期(自然月)運費', service: '', area: '', stops: '', trips: '', fare: detailNaturalOnlyFare, notes: '黃底標示'
-      })
-      nTotalRow.font = { ...DEFAULT_FONT, bold: true, color: { argb: 'FFED6C02' } } 
-    }
+    detailSheet.getCell(`A${detailSheet.rowCount}`).alignment = { horizontal: 'right' }
     
+    detailSheet.getColumn('date').numFmt = 'yyyy/mm/dd'
     detailSheet.getColumn('fare').numFmt = '#,##0'
   }
 
