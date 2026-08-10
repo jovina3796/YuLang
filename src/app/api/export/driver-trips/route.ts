@@ -20,6 +20,21 @@ function getNaturalMonth(year: number, monthIndex: number) {
   return { start: tpeMidnight(year, monthIndex, 1), end: tpeMidnight(year, monthIndex + 1, 1) }
 }
 
+// 🌟 將資料庫的 UTC Date 轉換為強制台灣日期的 Excel 安全 Date
+function getExcelDate(date: Date) {
+  const twDateStr = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }) // 取得 'YYYY-MM-DD'
+  const [y, m, d] = twDateStr.split('-').map(Number)
+  return new Date(y, m - 1, d) // 回傳一個強制以台灣年/月/日為基準的 Date 給 ExcelJS
+}
+
+type AggRow = {
+  vendor: string
+  service: string
+  fare: number
+  commRate: number
+  net: number
+}
+
 const DEFAULT_FONT = { name: '微軟正黑體', size: 11 }
 
 export async function GET(req: NextRequest) {
@@ -109,7 +124,7 @@ export async function GET(req: NextRequest) {
     if (inBilling || inNatural) {
       if (!detailTripsByVendor[vendorName]) detailTripsByVendor[vendorName] = []
       detailTripsByVendor[vendorName].push({
-        dateObj: tripDate,
+        dateObj: getExcelDate(tripDate), // 🌟 使用校正後的 Excel 專屬日期
         dateStr: dateStr,
         serviceType: serviceType,
         area: trip.destination_area || null,
@@ -172,7 +187,7 @@ export async function GET(req: NextRequest) {
         service: service,
         commRate: `${(data.commRate * 100).toFixed(0)}%`,
         fare: fare,
-        net: '' // 🌟 實領金額留白
+        net: '' 
       })
       vendorTotalFare += fare
       currentRow++
@@ -180,7 +195,6 @@ export async function GET(req: NextRequest) {
 
     const endRow = currentRow - 1
 
-    // 🌟 合併儲存格
     if (endRow > startRow) {
       billingSheet.mergeCells(`A${startRow}:A${endRow}`)
       billingSheet.mergeCells(`C${startRow}:C${endRow}`)
@@ -189,7 +203,6 @@ export async function GET(req: NextRequest) {
     billingSheet.getCell(`A${startRow}`).alignment = { vertical: 'middle', horizontal: 'center' }
     billingSheet.getCell(`C${startRow}`).alignment = { vertical: 'middle', horizontal: 'center' }
 
-    // 🌟 小計列
     vendorTotalNet = vendorTotalFare * (1 - data.commRate)
     const subTotalRow = billingSheet.addRow({
       vendor: '小計',
@@ -202,7 +215,6 @@ export async function GET(req: NextRequest) {
     billingSheet.mergeCells(`A${currentRow}:C${currentRow}`)
     billingSheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center', vertical: 'middle' }
 
-    // 🌟 小計列樣式：橘色文字、淺橘底色、下底線
     subTotalRow.eachCell(cell => {
       cell.font = { ...DEFAULT_FONT, color: { argb: 'FFD84315' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBE6' } }
@@ -213,7 +225,6 @@ export async function GET(req: NextRequest) {
     currentRow++
   }
 
-  // 🌟 總計列
   const btRow = billingSheet.addRow({ vendor: '計費結算總計', service: '', commRate: '', fare: '', net: grandBillingNet })
   billingSheet.mergeCells(`A${currentRow}:D${currentRow}`)
   billingSheet.getCell(`A${currentRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
@@ -251,7 +262,6 @@ export async function GET(req: NextRequest) {
     overviewSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
     overviewSheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
 
-    // 將資料依日期樞紐
     const dateMap: Record<string, { dateObj: Date, inBilling: boolean, fares: Record<string, number> }> = {}
     trips.forEach(t => {
       const dStr = t.dateStr
@@ -280,14 +290,13 @@ export async function GET(req: NextRequest) {
       }
       
       const row = overviewSheet.addRow(rowData)
-      if (!dInfo.inBilling) { // 非本期自動填滿淺黃色
+      if (!dInfo.inBilling) {
         row.eachCell(cell => {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }
         })
       }
     })
     
-    // 概覽總計列
     if (isSingleService) {
       const totalFare = trips.reduce((sum, t) => sum + t.fare, 0)
       const totRow = overviewSheet.addRow({ date: '合計', fare: totalFare })
@@ -318,7 +327,6 @@ export async function GET(req: NextRequest) {
     // --- 廠商明細分頁 ---
     const detailSheet = workbook.addWorksheet(`${vendor}明細`)
     
-    // 動態判斷是否需要 地區、店點數 欄位
     const hasArea = trips.some(t => t.area)
     const hasStops = trips.some(t => t.stops)
     
