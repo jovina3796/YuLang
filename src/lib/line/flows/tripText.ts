@@ -28,12 +28,11 @@ type ResolvedTrip = {
   stops:       number | null
   fare:        number
   vendor_label: string
-  // 🌟 紀錄這趟套用的特殊加成快照
   surcharge_name: string | null
   surcharge_rate: number
+  notes:       string | null // 🌟 新增：用來裝載夏季津貼的備註
 }
 
-// 🌟 定義從資料庫撈出來的特殊加成規則型別
 type SurchargeRule = {
   vendor_id: string
   name: string
@@ -44,45 +43,28 @@ type SurchargeRule = {
 const ADMIN_ROLES = ['admin', 'owner']
 
 const DATE_TOKEN_RE = /^(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月\d{1,2}[號日]?|\d{1,2}\/\d{1,2})(\s|$)/
-
-// 🌟 允許使用 + 號作為「今天」的極短快捷鍵
 const QUICK_TODAY_RE = /^\+(\s*)/
-
-// 🌟 隱式指定（直接打名字），抓取 2-4 個中文字，且後面緊接日期或 + 號
 const IMPLICIT_NAME_RE = /^([\u4e00-\u9fa5]{2,4})\s*(?=(今天|今日|昨天|昨日|\d{1,2}號|\d{1,2}月|\d{1,2}\/|\+))/
-
 const ASSIGN_DRIVER_HEAD_RE = /^指定司機[：:]\s*(\S+)\s+/
 const ASSIGN_DRIVER_TAIL_RE = /\s+指定司機[：:]\s*(\S+)\s*$/
 
-// 🌟 確保整份檔案只有這「唯一一個」 looksLikeTripText 函式
 export function looksLikeTripText(text: string): boolean {
   let stripped = text.trim().replace(ASSIGN_DRIVER_HEAD_RE, '').replace(ASSIGN_DRIVER_TAIL_RE, '').trim()
   
-  // 隱式指定：如果開頭是中文名字，先假裝它不存在
   const implicitMatch = stripped.match(IMPLICIT_NAME_RE)
   if (implicitMatch) {
     stripped = stripped.slice(implicitMatch[1].length).trim()
   }
 
-  // 🌟 1. 【超強閒聊過濾器】：句子裡有這些代名詞或語氣詞，絕對是閒聊
   const chatFeatures = /[嗎呢啊呀吧囉喔哈我你他她去買吃]+/
   if (chatFeatures.test(stripped)) return false
 
-  // 🌟 2. 【非車趟特徵過濾】(新增)：排除帳密、信箱、網址等 IT 資訊
   if (/(@|http|www|e-?mail|密碼|帳號|帳戶|用戶|登入|下載)/i.test(stripped)) return false
-  
-  // 🌟 3. 【防呆過濾】(新增)：連續出現 6 個以上的數字 (例如電話:0989220345、預設密碼:220345) 絕對不是正常車趟數字
   if (/\d{6,}/.test(stripped)) return false
 
-  // 4. 如果有明確的日期或 + 號開頭，視為車趟
   if (DATE_TOKEN_RE.test(stripped) || QUICK_TODAY_RE.test(stripped)) return true
-
-  // 5. 如果包含數字 (店點/趟數) 或是休假，視為車趟
   if (/\d/.test(stripped)) return true
   if (/^(休|休假|請假)$/.test(stripped)) return true
-
-  // 6. 若包含空格且長度適中，可能是省略數字的純業務文字 (如「全聯 瑞芳」)
-  // 加入長度限制，避免長篇大論的公告被誤判
   if (/\s/.test(stripped) && stripped.length > 3 && stripped.length < 25) return true
 
   return false
@@ -98,7 +80,6 @@ function extractAssignedDriver(text: string): { name: string; remaining: string;
   if (tail) {
     return { name: tail[1], remaining: t.slice(0, tail.index).trim(), isExplicit: true }
   }
-  // 🌟 隱式指定：抓取字首的名字
   const implicitHead = t.match(IMPLICIT_NAME_RE)
   if (implicitHead) {
     return { name: implicitHead[1], remaining: t.slice(implicitHead[1].length).trim(), isExplicit: false }
@@ -124,28 +105,22 @@ export async function handleTripText(
     const target = await findDriverByName(assigned.name)
     
     if (!target) {
-      // 只有在「明確指定 (指定司機：XXX)」時，找不到人才報錯
-      // 隱式指定如果找不到人，就當作他只是在講普通的話，忽略並繼續解析原文
       if (assigned.isExplicit) {
         await reply(replyToken, [textMessage(`找不到司機「${assigned.name}」（需為啟用中且姓名完全相符）。`)])
         return
       }
     } else {
-      // 🌟 重點防呆：如果名字「不是」該司機本人，且他「沒有」管理員權限，才報錯擋下
       if (target.id !== driverId && !(await isAdminLineUser(lineUserId))) {
         const msg = assigned.isExplicit ? '「指定司機」僅限管理員使用。' : '「代為回報」僅限管理員使用。'
         await reply(replyToken, [textMessage(msg)])
         return
       }
-      
-      // 順利驗證通過，抽掉名字，剩下的交給後面解析
       actingDriverId = target.id
       actingDriverName = target.name
       parseText = assigned.remaining
     }
   }
 
-  // 🌟 一次撈齊：費率規則、區域對照表，以及【啟用中的特殊加成規則】
   const [{ data: rulesRaw }, { data: aliasesRaw }, { data: surchargesRaw }] = await Promise.all([
     supabase
       .from('vendor_rate_rules')
@@ -162,21 +137,16 @@ export async function handleTripText(
   }
   
   const surcharges = (surchargesRaw ?? []) as SurchargeRule[]
-  // 將所有合法的加成關鍵字抽出來，傳給解析器
   const activeSurchargeKeywords = Array.from(new Set(surcharges.map(s => s.keyword)))
   
   const services = Array.from(new Set(rules.map(r => r.service_type).filter(Boolean)))
 
-  // 🌟 核心小魔術：補上日期前綴，讓後續解析器能看懂
   if (QUICK_TODAY_RE.test(parseText)) {
-    // 如果司機是用 + 開頭，轉換成「今天 」
     parseText = parseText.replace(QUICK_TODAY_RE, '今天 ')
   } else if (!DATE_TOKEN_RE.test(parseText)) {
-    // 🌟 如果完全沒有打日期，自動在最前面補上「今天 」
     parseText = `今天 ${parseText}`
   }
 
-  // 🌟 將合法關鍵字傳給解析引擎
   const parsed = parseTripText(parseText, services, activeSurchargeKeywords)
 
   if (parsed.kind === 'error') {
@@ -208,7 +178,6 @@ export async function handleTripText(
       const stops = t.stops ?? 0
       const isKpi = r.rule.pricing_mode === 'base_or_kpi' ? true : false
       
-      // 🌟 尋找這趟車趟的廠商，是否剛好有觸發當天司機打的加成關鍵字
       let appliedSurchargeName: string | null = null
       let appliedSurchargeRate: number = 0
       
@@ -222,7 +191,6 @@ export async function handleTripText(
         }
       }
 
-      // 🌟 呼叫計價引擎（傳入颱風假等方案的加成比例）
       const { finalFare } = calcFare(
         r.rule, 
         1, 
@@ -234,19 +202,31 @@ export async function handleTripText(
 
       const vRaw = (r.rule as unknown as { vendors: { name: string; warehouse: string | null } | { name: string; warehouse: string | null }[] | null }).vendors
       const v = Array.isArray(vRaw) ? vRaw[0] ?? null : vRaw
+      const vendorName = v?.name || ''
       const vendorLabel = v ? `${v.name}${v.warehouse ? `／${v.warehouse}` : ''}` : ''
       
-      // 🌟 加上特殊加成標記
+      let adjustedFare = finalFare
+      let finalNotes: string | null = null
+
+      // 🌟 核心邏輯：自動判定夏季津貼 (6~9月)
+      const tripMonth = new Date(twDateToIso(day.date)).getMonth() + 1
+      if (vendorName.includes('全台') && tripMonth >= 6 && tripMonth <= 9) {
+        const subsidy = 50 // LINE 解析目前強制為單趟 1，故固定 +50
+        adjustedFare += subsidy
+        finalNotes = `夏季津貼+${subsidy}`
+      }
+
       const finalVendorLabel = appliedSurchargeName ? `${vendorLabel} (${appliedSurchargeName})` : vendorLabel
 
       dayResolved.push({ 
         rule: r.rule, 
         area: t.area, 
         stops: t.stops, 
-        fare: finalFare, 
+        fare: adjustedFare, // 🌟 已經加上津貼的金額 (LINE 卡片會顯示正確的數字)
         vendor_label: finalVendorLabel,
         surcharge_name: appliedSurchargeName,
-        surcharge_rate: appliedSurchargeRate
+        surcharge_rate: appliedSurchargeRate,
+        notes: finalNotes // 🌟 攜帶備註資訊準備入庫
       })
     }
     resolvedDays.push({ kind: 'trips', date: day.date, resolved: dayResolved })
@@ -264,6 +244,7 @@ export async function handleTripText(
     const vehicleId = await resolveVehicleForDriver(actingDriverId, new Date(departedIso))
     
     for (const rt of day.resolved) {
+      // 計算抽成時，使用已經加上津貼的 rt.fare
       const fareInfo = await calculateTripCommission(
         actingDriverId,    
         rt.rule.vendor_id, 
@@ -283,7 +264,7 @@ export async function handleTripText(
         calculated_fare:  rt.fare,
         final_fare:       rt.fare,
         trip_count:       1,
-        notes:            null as string | null,
+        notes:            rt.notes, // 🌟 把夏季津貼的備註寫入資料庫
         status:           'completed',
         commission_rate:   fareInfo.commission_rate,
         driver_final_fare: fareInfo.driver_final_fare,
@@ -293,18 +274,15 @@ export async function handleTripText(
     }
   }
 
-  // 🌟 準備用來裝「剛寫入的車趟 ID」的陣列
   let insertedIds: string[] = []
 
   if (tripRows.length > 0) {
-    // 🌟 在結尾加上 .select('id') 讓資料庫回傳剛新增的 UUID
     const { data, error: insErr } = await supabase.from('trips').insert(tripRows).select('id')
     if (insErr) {
       console.error('[line.tripText] insert failed', insErr)
       await reply(replyToken, [textMessage(`寫入失敗：${insErr.message}`)])
       return
     }
-    // 🌟 把拿到的 ID 存起來
     if (data) {
       insertedIds = data.map(d => d.id)
     }
@@ -317,11 +295,8 @@ export async function handleTripText(
 
   const driverNote = actingDriverId !== driverId ? `代 ${actingDriverName} 回報` : ''
 
-  // 🌟 產生給 LINE 撤回按鈕用的 Payload (隱藏指令)
   let deletePayload: string | undefined
   if (insertedIds.length > 0) {
-    // LINE 規定 postback data 不能超過 300 字元。每個 UUID 是 36 字元。
-    // 一般司機報趟大多在 1~5 趟以內，非常安全。如果超過 7 趟，按鈕就不會顯示，避免壞掉。
     const payload = `action=undo_trip&ids=${insertedIds.join(',')}`
     if (payload.length <= 300) {
       deletePayload = payload
@@ -345,7 +320,6 @@ export async function handleTripText(
     }))
     const dateLabel = twDateToYmd(only.date) + (driverNote ? `（${driverNote}）` : '')
     await reply(replyToken, [
-      // 🌟 傳入 deletePayload 給泡泡卡片
       flexMessage('車趟已記錄', tripsSuccessBubble(dateLabel, lines, deletePayload)), 
     ])
     return
@@ -364,7 +338,6 @@ export async function handleTripText(
   })
   
   await reply(replyToken, [
-    // 🌟 傳入 deletePayload 給多天組合的泡泡卡片
     flexMessage('車趟已記錄', tripsMultiDayBubble(driverNote, groups, deletePayload)), 
   ])
 }
