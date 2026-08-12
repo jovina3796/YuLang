@@ -31,6 +31,25 @@ type RuleFull = {
   pricing_mode: string
 }
 
+// 🌟 新增：日期自動校正神器 (自動轉換斜線並補零)
+function normalizeDate(rawDate: string | null | undefined): string | null {
+  if (!rawDate) return null;
+  const formatted = String(rawDate).replace(/\//g, '-').trim();
+  const parts = formatted.split('-');
+  
+  if (parts.length === 3) {
+    const y = parts[0];
+    const m = parts[1].padStart(2, '0');
+    const d = parts[2].padStart(2, '0');
+    const finalDate = `${y}-${m}-${d}`;
+    
+    if (/^\d{4}-\d{2}-\d{2}$/.test(finalDate)) {
+      return finalDate;
+    }
+  }
+  return null;
+}
+
 function calcFare(rule: RuleFull, tripCount: number, stops: number, isKpi: boolean, isSpecial: boolean) {
   let fare = 0
   const bundle  = Math.max(1, rule.base_trips ?? 1)
@@ -99,24 +118,29 @@ export async function importTripsCsv(csvText: string): Promise<{
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r]
     const get = (k: string) => (idx(k) >= 0 ? (row[idx(k)] ?? '').trim() : '')
-    const date = get('日期')
+    
+    const rawDate = get('日期')
     const vendorName = get('廠商')
-    if (!date || !vendorName) { errors.push({ line: r + 1, reason: '日期或廠商空白' }); continue }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push({ line: r + 1, reason: `日期格式錯誤：${date}（應為 YYYY-MM-DD）` }); continue }
+    if (!rawDate || !vendorName) { errors.push({ line: r + 1, reason: '日期或廠商空白' }); continue }
+    
+    // 🌟 透過校正神器取得標準格式日期
+    const date = normalizeDate(rawDate)
+    if (!date) { errors.push({ line: r + 1, reason: `日期格式錯誤：${rawDate}（應為 YYYY-MM-DD 或 YYYY/M/D）` }); continue }
+    
     const tripCountStr = get('趟數')
     const tripCount = tripCountStr ? Number(tripCountStr) : 1
     if (!Number.isFinite(tripCount) || tripCount < 1) { errors.push({ line: r + 1, reason: `趟數無效：${tripCountStr}` }); continue }
+    
     const stopsStr = get('配送點數')
     const fareStr  = get('運費')
     const kpiStr   = get('KPI達標')
     const specStr  = get('加成費')
     
-    // 🌟 讀取單號欄位，作為覆蓋依據
     const tripCodeStr = get('單號') 
 
     parsed.push({
       line:        r + 1,
-      date,
+      date, // 🌟 這裡會寫入已經補滿零、轉換好的 YYYY-MM-DD
       vendorName,
       warehouse:   get('倉庫'),
       serviceType: get('業務類別'),
@@ -130,13 +154,12 @@ export async function importTripsCsv(csvText: string): Promise<{
       isKpi:       kpiStr === '' ? null : /^[YyTt1]/.test(kpiStr),
       isSpecial:   specStr === '' ? false : /^[YyTt1]/.test(specStr),
       notes:       get('備註'),
-      tripCode:    tripCodeStr === '' ? undefined : tripCodeStr // 🌟 存入解析結果
+      tripCode:    tripCodeStr === '' ? undefined : tripCodeStr 
     })
   }
 
   if (parsed.length === 0) return { ok: false, inserted: 0, errors: errors.length ? errors : [{ line: 0, reason: '沒有可匯入的資料列' }] }
 
-  // Lookup tables (rules include pricing fields for auto-calc)
   const [{ data: vendors }, { data: rules }, { data: drivers }, { data: vehicles }] = await Promise.all([
     supabase.from('vendors').select('id, name, warehouse'),
     supabase.from('vendor_rate_rules')
@@ -182,7 +205,6 @@ export async function importTripsCsv(csvText: string): Promise<{
     const vehicleId = p.plate      ? vehicleMap.get(p.plate)       ?? null : null
 
     inserts.push({
-      // 🌟 如果有單號，就塞進去準備覆蓋；沒有就讓資料庫自動生成新單號
       ...(p.tripCode ? { trip_code: p.tripCode } : {}), 
       vendor_id:        vid,
       rate_rule_id:     rule.id,
@@ -202,7 +224,6 @@ export async function importTripsCsv(csvText: string): Promise<{
 
   if (inserts.length === 0) return { ok: false, inserted: 0, errors }
 
-  // 批次處理每一筆匯入的車趟，自動抓取該司機與廠商對應的抽成 % 與金額
   const insertsWithCommission = await Promise.all(
     inserts.map(async (row) => {
       const fare = row.final_fare ?? row.calculated_fare ?? 0
@@ -218,10 +239,9 @@ export async function importTripsCsv(csvText: string): Promise<{
     })
   )
 
-  // 🌟 重頭戲：改用 upsert，並指定依照 trip_code 來判斷是否重複！
   const { error } = await supabase.from('trips').upsert(insertsWithCommission, {
-    onConflict: 'trip_code', // 當單號重複時，進行更新覆蓋
-    ignoreDuplicates: false  // 確保是「更新」而不是略過
+    onConflict: 'trip_code',
+    ignoreDuplicates: false 
   })
 
   if (error) return { ok: false, inserted: 0, errors: [...errors, { line: 0, reason: `寫入失敗：${error.message}` }] }
