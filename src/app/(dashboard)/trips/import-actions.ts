@@ -1,7 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
-// 🌟 引入我們新增的抽成計算工具
 import { calculateTripCommission } from '@/lib/finance/commission'
 
 type ParsedRow = {
@@ -20,7 +19,6 @@ type ParsedRow = {
   isKpi:       boolean | null
   isSpecial:   boolean
   notes:       string
-  // 🌟 新增單號欄位 (供 Upsert 覆蓋使用)
   tripCode?:   string
 }
 
@@ -31,7 +29,6 @@ type RuleFull = {
   pricing_mode: string
 }
 
-// 🌟 新增：日期自動校正神器 (自動轉換斜線並補零)
 function normalizeDate(rawDate: string | null | undefined): string | null {
   if (!rawDate) return null;
   const formatted = String(rawDate).replace(/\//g, '-').trim();
@@ -123,7 +120,6 @@ export async function importTripsCsv(csvText: string): Promise<{
     const vendorName = get('廠商')
     if (!rawDate || !vendorName) { errors.push({ line: r + 1, reason: '日期或廠商空白' }); continue }
     
-    // 🌟 透過校正神器取得標準格式日期
     const date = normalizeDate(rawDate)
     if (!date) { errors.push({ line: r + 1, reason: `日期格式錯誤：${rawDate}（應為 YYYY-MM-DD 或 YYYY/M/D）` }); continue }
     
@@ -135,12 +131,11 @@ export async function importTripsCsv(csvText: string): Promise<{
     const fareStr  = get('運費')
     const kpiStr   = get('KPI達標')
     const specStr  = get('加成費')
-    
     const tripCodeStr = get('單號') 
 
     parsed.push({
       line:        r + 1,
-      date, // 🌟 這裡會寫入已經補滿零、轉換好的 YYYY-MM-DD
+      date,
       vendorName,
       warehouse:   get('倉庫'),
       serviceType: get('業務類別'),
@@ -199,7 +194,17 @@ export async function importTripsCsv(csvText: string): Promise<{
     const stops    = p.actualStops ?? 0
     const isKpi    = p.isKpi ?? true
     const computed = calcFare(rule, p.tripCount, stops, isKpi, p.isSpecial)
-    const finalFare = p.finalFare != null && Number.isFinite(p.finalFare) ? p.finalFare : computed
+    
+    let finalFare = p.finalFare != null && Number.isFinite(p.finalFare) ? p.finalFare : computed
+    let finalNotes = p.notes || null
+
+    // 🌟 核心邏輯：自動判定夏季津貼 (6~9月)
+    const tripMonth = new Date(`${p.date}T00:00:00`).getMonth() + 1
+    if (p.vendorName.includes('全台') && tripMonth >= 6 && tripMonth <= 9) {
+      const subsidy = 50 * p.tripCount // 每趟 50，報兩趟就加 100
+      finalFare += subsidy
+      finalNotes = finalNotes ? `${finalNotes} (夏季津貼+${subsidy})` : `夏季津貼+${subsidy}`
+    }
 
     const driverId  = p.driverName ? driverMap.get(p.driverName)  ?? null : null
     const vehicleId = p.plate      ? vehicleMap.get(p.plate)       ?? null : null
@@ -215,9 +220,9 @@ export async function importTripsCsv(csvText: string): Promise<{
       actual_stops:     p.actualStops,
       is_kpi_achieved:  rule.pricing_mode === 'base_or_kpi' ? isKpi : null,
       calculated_fare:  computed,
-      final_fare:       finalFare,
+      final_fare:       finalFare, // 🌟 寫入加總後的運費
       trip_count:       p.tripCount,
-      notes:            p.notes || null,
+      notes:            finalNotes, // 🌟 寫入帶有津貼說明的備註
       status:           'completed',
     })
   }
