@@ -88,7 +88,11 @@ export async function POST(request: Request): Promise<Response> {
   );
 
   // 4. 寫入資料庫
+  const dateString = loggedAt.replace(/-/g, '');
+  const uniqueTripCode = `T-${dateString}-${Date.now().toString().slice(-6)}`;
+
   const { error: insErr } = await supabase.from('trips').insert({
+    trip_code:         uniqueTripCode,
     vendor_id:         vendorId,
     rate_rule_id:      rateRuleId,
     driver_id:         driver.id,
