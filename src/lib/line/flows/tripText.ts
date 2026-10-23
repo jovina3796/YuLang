@@ -251,7 +251,12 @@ export async function handleTripText(
         rt.fare            
       )
 
+      // 🌟 產生不重複的車趟代號 (加上隨機數，確保同時輸入多筆路線時也不會重複)
+      const dateString = twDateToYmd(day.date).replace(/-/g, '');
+      const uniqueTripCode = `T-${dateString}-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
+
       tripRows.push({
+        trip_code:        uniqueTripCode, // 🌟 補上這行，強制寫入唯一代號
         vendor_id:        rt.rule.vendor_id,
         rate_rule_id:     rt.rule.id,
         driver_id:        actingDriverId,
