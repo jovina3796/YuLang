@@ -8,7 +8,7 @@ import { calculateTripCommission } from '@/lib/finance/commission'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// POST /api/line/trip — used by the LIFF form to submit one trip.
+// POST /api/line/trip — used by the LIFF form to submit one trip....
 // Auth: Authorization: Bearer <LIFF access token>
 export async function POST(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization') ?? ''
